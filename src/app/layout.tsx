@@ -20,7 +20,10 @@ export const metadata: Metadata = {
   title: "MassaPro - Demo Configuration Dashboard",
   description: "Professional demo configuration dashboard for managing scenarios, KPIs, and client interactions",
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico", sizes: "64x64" },
+      { url: "/massapro-logo.png", type: "image/png" },
+    ],
   },
 }
 
