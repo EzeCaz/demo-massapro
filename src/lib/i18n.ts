@@ -1,0 +1,328 @@
+'use client'
+
+export type Language = 'en' | 'es'
+
+export const translations: Record<Language, Record<string, string>> = {
+  en: {
+    // Header
+    'header.brand': 'MassaPro',
+    'header.admin': 'Admin Panel',
+    'header.dashboard': 'Dashboard',
+    'header.logout': 'Logout',
+    'header.welcome': 'Welcome',
+
+    // Login
+    'login.title': 'Welcome to MassaPro',
+    'login.subtitle': 'Demo Configuration Dashboard',
+    'login.signin': 'Sign In',
+    'login.signup': 'Sign Up',
+    'login.email': 'Email',
+    'login.password': 'Password',
+    'login.confirmPassword': 'Confirm Password',
+    'login.name': 'Full Name',
+    'login.company': 'Company',
+    'login.forgotPassword': 'Forgot your password?',
+    'login.googleSignin': 'Sign in with Google',
+    'login.comingSoon': 'Coming soon',
+    'login.noAccount': "Don't have an account?",
+    'login.hasAccount': 'Already have an account?',
+    'login.inviteToken': 'Invite Token',
+    'login.resetPassword': 'Reset Password',
+    'login.backToLogin': 'Back to Login',
+
+    // Setup Wizard
+    'setup.title': 'Setup Your Demo Configuration',
+    'setup.subtitle': 'Let\'s get your demo scenarios configured',
+    'setup.q1': 'How many demo scenarios?',
+    'setup.q2': 'Name Your Scenarios',
+    'setup.q3': 'Set KPIs per Scenario',
+    'setup.scenarioName': 'Scenario Name',
+    'setup.kpiName': 'KPI Name',
+    'setup.kpiTarget': 'Target Value',
+    'setup.addKpi': 'Add KPI',
+    'setup.removeKpi': 'Remove',
+    'setup.create': 'Create Scenarios',
+
+    // Dashboard
+    'dashboard.title': 'Demo Dashboard',
+    'dashboard.addScenario': 'Add Scenario',
+    'dashboard.saveDraft': 'Save as Draft',
+    'dashboard.submit': 'Submit',
+    'dashboard.submitted': 'Submitted',
+    'dashboard.draft': 'Draft',
+    'dashboard.saved': 'Draft saved successfully!',
+    'dashboard.submittedMsg': 'Scenario submitted successfully!',
+    'dashboard.error': 'An error occurred. Please try again.',
+
+    // Scenario Form
+    'form.kpis': 'KPIs',
+    'form.websiteUrl': 'Company Website URL',
+    'form.overview': 'Overview',
+    'form.companyGoals': 'Company Goals',
+    'form.aiAutomations': 'AI/Automations Required',
+    'form.demoFocusAreas': 'Other Demo Focus Areas',
+    'form.languagesVoice': 'Languages - Voice',
+    'form.languagesText': 'Languages - Text',
+    'form.scriptsFlows': 'Scripts / Flows',
+    'form.knowledgeBase': 'Knowledge Base - Text',
+    'form.faqObjection': 'FAQ / Objection Handling',
+    'form.requiredIntegrations': 'Required Integrations',
+    'form.erpCrmCcaas': 'ERP / CRM / CCaaS Platform',
+    'form.attachments': 'Attachments',
+    'form.addAttachment': 'Add File',
+    'form.knowledgeBaseFiles': 'Knowledge Base Files',
+    'form.upload': 'Upload',
+    'form.dragDrop': 'Drag and drop files here, or click to browse',
+
+    // Tabs
+    'tab.collaborators': 'Collaborators',
+    'tab.comments': 'Comments',
+    'tab.changeHistory': 'Change History',
+    'tab.adminNotes': 'Admin Notes',
+
+    // Collaborators
+    'collab.add': 'Add Collaborator',
+    'collab.email': 'Email Address',
+    'collab.access': 'Access Level',
+    'collab.view': 'View Only',
+    'collab.edit': 'Can Edit',
+    'collab.shareLink': 'Generate Public Link',
+    'collab.remove': 'Remove',
+    'collab.publicLink': 'Public Link',
+
+    // Comments
+    'comments.add': 'Add Comment',
+    'comments.placeholder': 'Write a comment... (use @email to tag)',
+    'comments.send': 'Send',
+
+    // Change Log
+    'changelog.field': 'Field',
+    'changelog.from': 'From',
+    'changelog.to': 'To',
+    'changelog.by': 'By',
+    'changelog.when': 'When',
+
+    // Admin Notes
+    'adminNotes.add': 'Add Note',
+    'adminNotes.placeholder': 'Write a note to the client...',
+    'adminNotes.send': 'Send Note',
+    'adminNotes.markRead': 'Mark as Read',
+
+    // Admin Panel
+    'admin.title': 'Admin Panel',
+    'admin.clients': 'Clients',
+    'admin.scenarios': 'Scenarios',
+    'admin.invites': 'Invites',
+    'admin.export': 'Export',
+    'admin.createInvite': 'Create Invite',
+    'admin.inviteEmail': 'Email',
+    'admin.inviteName': 'Name',
+    'admin.inviteCompany': 'Company',
+    'admin.invitePassword': 'Temporary Password',
+    'admin.generateInvite': 'Generate Invite',
+    'admin.copyCredentials': 'Copy Credentials',
+    'admin.filterClient': 'Filter by Client',
+    'admin.filterCompany': 'Filter by Company',
+    'admin.filterStatus': 'Filter by Status',
+    'admin.sortBy': 'Sort By',
+    'admin.lastModified': 'Last Modified',
+    'admin.createdDate': 'Created Date',
+    'admin.translate': 'Translate',
+    'admin.addNote': 'Add Note',
+    'admin.editScenario': 'Edit',
+    'admin.viewScenario': 'View',
+    'admin.downloadExport': 'Download Export',
+    'admin.deleteClient': 'Delete Client',
+    'admin.inlineEdit': 'Edit',
+
+    // Translation
+    'translate.title': 'Translation',
+    'translate.original': 'Original',
+    'translate.translated': 'Translated',
+    'translate.detectLang': 'Auto-detect',
+    'translate.direction': 'Direction',
+    'translate.toEnglish': 'Spanish → English',
+    'translate.toSpanish': 'English → Spanish',
+    'translate.save': 'Save Translation',
+
+    // Export
+    'export.pdf': 'Export PDF',
+    'export.csv': 'Export CSV',
+    'export.files': 'Download Files',
+
+    // General
+    'general.save': 'Save',
+    'general.cancel': 'Cancel',
+    'general.delete': 'Delete',
+    'general.edit': 'Edit',
+    'general.add': 'Add',
+    'general.close': 'Close',
+    'general.loading': 'Loading...',
+    'general.noData': 'No data available',
+    'general.confirm': 'Are you sure?',
+    'general.search': 'Search...',
+    'general.all': 'All',
+  },
+  es: {
+    // Header
+    'header.brand': 'MassaPro',
+    'header.admin': 'Panel de Admin',
+    'header.dashboard': 'Panel',
+    'header.logout': 'Cerrar Sesión',
+    'header.welcome': 'Bienvenido',
+
+    // Login
+    'login.title': 'Bienvenido a MassaPro',
+    'login.subtitle': 'Panel de Configuración de Demo',
+    'login.signin': 'Iniciar Sesión',
+    'login.signup': 'Registrarse',
+    'login.email': 'Correo Electrónico',
+    'login.password': 'Contraseña',
+    'login.confirmPassword': 'Confirmar Contraseña',
+    'login.name': 'Nombre Completo',
+    'login.company': 'Empresa',
+    'login.forgotPassword': '¿Olvidaste tu contraseña?',
+    'login.googleSignin': 'Iniciar sesión con Google',
+    'login.comingSoon': 'Próximamente',
+    'login.noAccount': '¿No tienes una cuenta?',
+    'login.hasAccount': '¿Ya tienes una cuenta?',
+    'login.inviteToken': 'Token de Invitación',
+    'login.resetPassword': 'Restablecer Contraseña',
+    'login.backToLogin': 'Volver al Inicio de Sesión',
+
+    // Setup Wizard
+    'setup.title': 'Configura tu Demo',
+    'setup.subtitle': 'Vamos a configurar tus escenarios de demo',
+    'setup.q1': '¿Cuántos escenarios de demo?',
+    'setup.q2': 'Nombra tus Escenarios',
+    'setup.q3': 'Establece KPIs por Escenario',
+    'setup.scenarioName': 'Nombre del Escenario',
+    'setup.kpiName': 'Nombre del KPI',
+    'setup.kpiTarget': 'Valor Objetivo',
+    'setup.addKpi': 'Agregar KPI',
+    'setup.removeKpi': 'Eliminar',
+    'setup.create': 'Crear Escenarios',
+
+    // Dashboard
+    'dashboard.title': 'Panel de Demo',
+    'dashboard.addScenario': 'Agregar Escenario',
+    'dashboard.saveDraft': 'Guardar como Borrador',
+    'dashboard.submit': 'Enviar',
+    'dashboard.submitted': 'Enviado',
+    'dashboard.draft': 'Borrador',
+    'dashboard.saved': '¡Borrador guardado exitosamente!',
+    'dashboard.submittedMsg': '¡Escenario enviado exitosamente!',
+    'dashboard.error': 'Ocurrió un error. Por favor, intenta de nuevo.',
+
+    // Scenario Form
+    'form.kpis': 'KPIs',
+    'form.websiteUrl': 'URL del Sitio Web de la Empresa',
+    'form.overview': 'Resumen',
+    'form.companyGoals': 'Objetivos de la Empresa',
+    'form.aiAutomations': 'IA/Automatizaciones Requeridas',
+    'form.demoFocusAreas': 'Otras Áreas de Enfoque del Demo',
+    'form.languagesVoice': 'Idiomas - Voz',
+    'form.languagesText': 'Idiomas - Texto',
+    'form.scriptsFlows': 'Scripts / Flujos',
+    'form.knowledgeBase': 'Base de Conocimiento - Texto',
+    'form.faqObjection': 'FAQ / Manejo de Objeciones',
+    'form.requiredIntegrations': 'Integraciones Requeridas',
+    'form.erpCrmCcaas': 'Plataforma ERP / CRM / CCaaS',
+    'form.attachments': 'Adjuntos',
+    'form.addAttachment': 'Agregar Archivo',
+    'form.knowledgeBaseFiles': 'Archivos de Base de Conocimiento',
+    'form.upload': 'Subir',
+    'form.dragDrop': 'Arrastra y suelta archivos aquí, o haz clic para buscar',
+
+    // Tabs
+    'tab.collaborators': 'Colaboradores',
+    'tab.comments': 'Comentarios',
+    'tab.changeHistory': 'Historial de Cambios',
+    'tab.adminNotes': 'Notas del Admin',
+
+    // Collaborators
+    'collab.add': 'Agregar Colaborador',
+    'collab.email': 'Correo Electrónico',
+    'collab.access': 'Nivel de Acceso',
+    'collab.view': 'Solo Ver',
+    'collab.edit': 'Puede Editar',
+    'collab.shareLink': 'Generar Enlace Público',
+    'collab.remove': 'Eliminar',
+    'collab.publicLink': 'Enlace Público',
+
+    // Comments
+    'comments.add': 'Agregar Comentario',
+    'comments.placeholder': 'Escribe un comentario... (usa @email para mencionar)',
+    'comments.send': 'Enviar',
+
+    // Change Log
+    'changelog.field': 'Campo',
+    'changelog.from': 'De',
+    'changelog.to': 'A',
+    'changelog.by': 'Por',
+    'changelog.when': 'Cuándo',
+
+    // Admin Notes
+    'adminNotes.add': 'Agregar Nota',
+    'adminNotes.placeholder': 'Escribe una nota para el cliente...',
+    'adminNotes.send': 'Enviar Nota',
+    'adminNotes.markRead': 'Marcar como Leído',
+
+    // Admin Panel
+    'admin.title': 'Panel de Admin',
+    'admin.clients': 'Clientes',
+    'admin.scenarios': 'Escenarios',
+    'admin.invites': 'Invitaciones',
+    'admin.export': 'Exportar',
+    'admin.createInvite': 'Crear Invitación',
+    'admin.inviteEmail': 'Correo',
+    'admin.inviteName': 'Nombre',
+    'admin.inviteCompany': 'Empresa',
+    'admin.invitePassword': 'Contraseña Temporal',
+    'admin.generateInvite': 'Generar Invitación',
+    'admin.copyCredentials': 'Copiar Credenciales',
+    'admin.filterClient': 'Filtrar por Cliente',
+    'admin.filterCompany': 'Filtrar por Empresa',
+    'admin.filterStatus': 'Filtrar por Estado',
+    'admin.sortBy': 'Ordenar Por',
+    'admin.lastModified': 'Última Modificación',
+    'admin.createdDate': 'Fecha de Creación',
+    'admin.translate': 'Traducir',
+    'admin.addNote': 'Agregar Nota',
+    'admin.editScenario': 'Editar',
+    'admin.viewScenario': 'Ver',
+    'admin.downloadExport': 'Descargar Exportación',
+    'admin.deleteClient': 'Eliminar Cliente',
+    'admin.inlineEdit': 'Editar',
+
+    // Translation
+    'translate.title': 'Traducción',
+    'translate.original': 'Original',
+    'translate.translated': 'Traducido',
+    'translate.detectLang': 'Auto-detectar',
+    'translate.direction': 'Dirección',
+    'translate.toEnglish': 'Español → Inglés',
+    'translate.toSpanish': 'Inglés → Español',
+    'translate.save': 'Guardar Traducción',
+
+    // Export
+    'export.pdf': 'Exportar PDF',
+    'export.csv': 'Exportar CSV',
+    'export.files': 'Descargar Archivos',
+
+    // General
+    'general.save': 'Guardar',
+    'general.cancel': 'Cancelar',
+    'general.delete': 'Eliminar',
+    'general.edit': 'Editar',
+    'general.add': 'Agregar',
+    'general.close': 'Cerrar',
+    'general.loading': 'Cargando...',
+    'general.noData': 'No hay datos disponibles',
+    'general.confirm': '¿Estás seguro?',
+    'general.search': 'Buscar...',
+    'general.all': 'Todos',
+  },
+}
+
+export type TranslationKey = keyof typeof translations.en

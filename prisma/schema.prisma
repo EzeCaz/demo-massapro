@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  role          String    @default("user") // "admin" or "user"
+  company       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  scenarios     Scenario[]
+  collaborations Collaboration[]
+  comments      ScenarioComment[]
+  changeLogs    ChangeLog[]
+  adminNotesSent AdminNote[]  @relation("SentNotes")
+  adminNotesReceived AdminNote[] @relation("ReceivedNotes")
+  invitesSent   Invite[]  @relation("SentInvites")
+  invitesReceived Invite[] @relation("ReceivedInvites")
+}
+
+model Scenario {
+  id                      String    @id @default(cuid())
+  clientId                String
+  client                  User      @relation(fields: [clientId], references: [id])
+  name                    String
+  order                   Int       @default(0)
+  status                  String    @default("draft") // "draft" or "submitted"
+  companyWebsiteUrl       String?
+  overview                String?
+  overviewEs              String?
+  overviewEn              String?
+  companyGoals            String?
+  companyGoalsEs          String?
+  companyGoalsEn          String?
+  aiAutomationsRequired   String?
+  aiAutomationsRequiredEs String?
+  aiAutomationsRequiredEn String?
+  demoFocusAreas          String?
+  demoFocusAreasEs        String?
+  demoFocusAreasEn        String?
+  languagesVoice          String?
+  languagesText           String?
+  scriptsFlows            String?
+  scriptsFlowsEs          String?
+  scriptsFlowsEn          String?
+  knowledgeBaseText       String?
+  knowledgeBaseTextEs     String?
+  knowledgeBaseTextEn     String?
+  faqObjectionHandling    String?
+  faqObjectionHandlingEs  String?
+  faqObjectionHandlingEn  String?
+  requiredIntegrations    String?
+  requiredIntegrationsEs  String?
+  requiredIntegrationsEn  String?
+  erpCrmCcaas             String?
+  erpCrmCcaasEs           String?
+  erpCrmCcaasEn           String?
+  submittedDate           DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  kpis                    KPI[]
+  attachments             Attachment[]
+  collaborations          Collaboration[]
+  changeLogs              ChangeLog[]
+  comments                ScenarioComment[]
+  adminNotes              AdminNote[]
+}
+
+model KPI {
+  id          String   @id @default(cuid())
+  scenarioId  String
+  scenario    Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  name        String
+  targetValue String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Attachment {
+  id          String   @id @default(cuid())
+  scenarioId  String
+  scenario    Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  fileName    String
+  filePath    String
+  fileType    String?
+  fileSize    Int?
+  category    String?  // "knowledge_base" or "attachment"
+  createdAt   DateTime @default(now())
+}
+
+model Collaboration {
+  id                String   @id @default(cuid())
+  scenarioId        String
+  scenario          Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  collaboratorId    String
+  collaborator      User     @relation(fields: [collaboratorId], references: [id])
+  accessLevel       String   @default("view") // "view" or "edit"
+  publicToken       String?  @unique
+  createdAt         DateTime @default(now())
+}
+
+model ChangeLog {
+  id            String   @id @default(cuid())
+  scenarioId    String
+  scenario      Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  fieldName     String
+  oldValue      String?
+  newValue      String?
+  changeSummary String?
+  createdAt     DateTime @default(now())
+}
+
+model ScenarioComment {
+  id          String   @id @default(cuid())
+  scenarioId  String
+  scenario    Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+  content     String
+  taggedUsers String? // comma-separated emails
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AdminNote {
+  id            String   @id @default(cuid())
+  scenarioId    String
+  scenario      Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  sentByAdminId String
+  sentByAdmin   User     @relation("SentNotes", fields: [sentByAdminId], references: [id])
+  clientId      String
+  client        User     @relation("ReceivedNotes", fields: [clientId], references: [id])
+  note          String
+  isRead        Boolean  @default(false)
+  sendEmail     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+}
+
+model Invite {
+  id          String   @id @default(cuid())
+  token       String   @unique
+  email       String
+  name        String?
+  company     String?
+  password    String?  // temporary password
+  sentByAdminId String
+  sentByAdmin   User   @relation("SentInvites", fields: [sentByAdminId], references: [id])
+  usedByUserId String?
+  usedByUser   User?   @relation("ReceivedInvites", fields: [usedByUserId], references: [id])
+  usedAt      DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+}
