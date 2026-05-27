@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 
 export async function GET(req: NextRequest) {
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     if (scenarioId) {
       // Allow non-admin users to export their own scenarios
       const where: any = { id: scenarioId }
-      if (userRole !== 'admin') {
+      if (!isAdminRole(userRole)) {
         where.OR = [{ clientId: userId }, { collaborations: { some: { collaboratorId: userId } } }]
       }
       scenarios = await db.scenario.findMany({
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
         },
       })
     } else if (clientId) {
-      if (userRole !== 'admin' && clientId !== userId) {
+      if (!isAdminRole(userRole) && clientId !== userId) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
       scenarios = await db.scenario.findMany({
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
         },
       })
     } else {
-      if (userRole !== 'admin') {
+      if (!isAdminRole(userRole)) {
         // Non-admin users can only export their own scenarios
         scenarios = await db.scenario.findMany({
           where: { OR: [{ clientId: userId }, { collaborations: { some: { collaboratorId: userId } } }] },

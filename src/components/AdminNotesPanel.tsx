@@ -70,7 +70,7 @@ export default function AdminNotesPanel({ scenarioId }: AdminNotesPanelProps) {
                       {new Date(note.createdAt).toLocaleString()}
                     </span>
                   </div>
-                  {!note.isRead && userRole !== 'admin' && (
+                  {!note.isRead && userRole !== 'admin' && userRole !== 'super_admin' && (
                     <Button
                       variant="ghost"
                       size="sm"

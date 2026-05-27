@@ -15,7 +15,7 @@ export default function HomePage() {
       router.replace('/login')
     } else if (status === 'authenticated' && hasChecked.current) {
       const userRole = (session?.user as any)?.role
-      if (userRole === 'admin') {
+      if (userRole === 'admin' || userRole === 'super_admin') {
         router.replace('/admin')
       } else {
         router.replace('/dashboard')

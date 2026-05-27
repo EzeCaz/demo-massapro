@@ -19,7 +19,7 @@ export default function AdminPage() {
     }
     if (status === 'authenticated' && hasCheckedAuth.current) {
       const userRole = (session?.user as any)?.role
-      if (userRole !== 'admin') {
+      if (userRole !== 'admin' && userRole !== 'super_admin') {
         router.replace('/dashboard')
       }
     }
@@ -46,7 +46,7 @@ export default function AdminPage() {
   }
 
   // Not authenticated or not admin — show loading while redirect happens
-  if (status !== 'authenticated' || (session?.user as any)?.role !== 'admin') {
+  if (status !== 'authenticated' || ((session?.user as any)?.role !== 'admin' && (session?.user as any)?.role !== 'super_admin')) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">

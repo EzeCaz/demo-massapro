@@ -2,7 +2,7 @@
 
 import { useLanguage } from '@/hooks/useLanguage'
 import { signOut, useSession } from 'next-auth/react'
-import { Globe, LogOut, Shield, LayoutDashboard } from 'lucide-react'
+import { Globe, LogOut, Shield, LayoutDashboard, Crown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -28,7 +28,7 @@ export default function MassaProHeader() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left: Logo + Brand */}
-          <Link href={userRole === 'admin' ? '/admin' : '/dashboard'} className="flex items-center gap-3">
+          <Link href={(userRole === 'admin' || userRole === 'super_admin') ? '/admin' : '/dashboard'} className="flex items-center gap-3">
             <img
               src="/massapro-logo.png"
               alt="MassaPro Logo"
@@ -42,7 +42,7 @@ export default function MassaProHeader() {
           {/* Right: Nav + Language + User */}
           <div className="flex items-center gap-2 sm:gap-4">
             {/* View Toggle (Admin) */}
-            {userRole === 'admin' && (
+            {(userRole === 'admin' || userRole === 'super_admin') && (
               <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1">
                 <Link href="/admin">
                   <Button
@@ -105,9 +105,10 @@ export default function MassaProHeader() {
                 <div className="px-2 py-1.5">
                   <p className="text-sm font-medium">{session?.user?.name || 'User'}</p>
                   <p className="text-xs text-muted-foreground truncate">{session?.user?.email}</p>
-                  {userRole === 'admin' && (
-                    <span className="inline-flex items-center gap-1 text-xs text-vivid-blue font-medium mt-1">
-                      <Shield className="h-3 w-3" /> Admin
+                  {(userRole === 'admin' || userRole === 'super_admin') && (
+                    <span className={`inline-flex items-center gap-1 text-xs font-medium mt-1 ${userRole === 'super_admin' ? 'text-amber-500' : 'text-vivid-blue'}`}>
+                      {userRole === 'super_admin' ? <Crown className="h-3 w-3" /> : <Shield className="h-3 w-3" />}
+                      {userRole === 'super_admin' ? 'Super Admin' : 'Admin'}
                     </span>
                   )}
                 </div>

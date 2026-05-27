@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 
 export async function GET(
@@ -35,7 +35,7 @@ export async function GET(
       const isOwner = scenario.clientId === userId
       const isCollaborator = scenario.collaborations.some(c => c.collaboratorId === userId)
 
-      if (userRole !== 'admin' && !isOwner && !isCollaborator) {
+      if (!isAdminRole(userRole) && !isOwner && !isCollaborator) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     }
@@ -71,7 +71,7 @@ export async function PUT(
     }
 
     // Check permissions
-    if (userRole !== 'admin' && existingScenario.clientId !== userId) {
+    if (!isAdminRole(userRole) && existingScenario.clientId !== userId) {
       const collab = await db.collaboration.findFirst({
         where: { scenarioId: id, collaboratorId: userId, accessLevel: 'edit' },
       })
@@ -168,7 +168,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Scenario not found' }, { status: 404 })
     }
 
-    if (userRole !== 'admin' && scenario.clientId !== userId) {
+    if (!isAdminRole(userRole) && scenario.clientId !== userId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 
 export async function GET(
@@ -37,7 +37,7 @@ export async function POST(
     const userId = (session.user as any).id
     const userRole = (session.user as any).role
 
-    if (userRole !== 'admin') {
+    if (!isAdminRole(userRole)) {
       return NextResponse.json({ error: 'Forbidden - Admin only' }, { status: 403 })
     }
 

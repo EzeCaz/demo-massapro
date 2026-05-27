@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 
 export async function POST(
@@ -21,7 +21,7 @@ export async function POST(
       return NextResponse.json({ error: 'Scenario not found' }, { status: 404 })
     }
 
-    if (scenario.clientId !== userId && (session.user as any).role !== 'admin') {
+    if (scenario.clientId !== userId && !isAdminRole((session.user as any).role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

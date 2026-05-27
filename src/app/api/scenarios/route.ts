@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 
 export async function GET(req: NextRequest) {
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     const userRole = (session.user as any).role
 
     let scenarios
-    if (userRole === 'admin') {
+    if (isAdminRole(userRole)) {
       scenarios = await db.scenario.findMany({
         orderBy: { order: 'asc' },
         include: { client: { select: { id: true, name: true, email: true, company: true } }, kpis: true, _count: { select: { attachments: true, comments: true, collaborations: true, adminNotes: true } } },

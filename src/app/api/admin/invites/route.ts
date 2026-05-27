@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { v4 as uuidv4 } from 'uuid'
 import bcrypt from 'bcryptjs'
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     }
 
     const userRole = (session.user as any).role
-    if (userRole !== 'admin') {
+    if (!isAdminRole(userRole)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -41,12 +41,21 @@ export async function POST(req: NextRequest) {
 
     const adminId = (session.user as any).id
     const userRole = (session.user as any).role
-    if (userRole !== 'admin') {
+    if (!isAdminRole(userRole)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const body = await req.json()
     const { email, name, company, password } = body
+
+    const targetRole = body.role || 'user'
+    // Only super_admin can create admin users
+    if (targetRole === 'admin' && userRole !== 'super_admin') {
+      return NextResponse.json({ error: 'Only super admins can create admin users' }, { status: 403 })
+    }
+    if (targetRole === 'super_admin') {
+      return NextResponse.json({ error: 'Cannot create super admin users' }, { status: 403 })
+    }
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })
@@ -67,7 +76,7 @@ export async function POST(req: NextRequest) {
           name: name || null,
           company: company || null,
           passwordHash,
-          role: 'user',
+          role: targetRole,
         },
       })
       userId = newUser.id

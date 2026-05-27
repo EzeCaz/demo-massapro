@@ -16,10 +16,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
+import { useSession } from 'next-auth/react'
 import {
   ChevronDown, ChevronRight, Pencil, Trash2, Check, X, Plus,
   Users, FileText, Mail, Copy, Loader2, Search, Languages,
-  StickyNote, Download, Eye, Filter,
+  StickyNote, Download, Eye, Filter, Shield, Crown,
 } from 'lucide-react'
 import ScenarioForm from './ScenarioForm'
 import CollaboratorPanel from './CollaboratorPanel'
@@ -31,13 +32,16 @@ import TranslationPanel from './TranslationPanel'
 export default function AdminPanel() {
   const { t } = useLanguage()
   const queryClient = useQueryClient()
+  const { data: session } = useSession()
+  const currentUserRole = (session?.user as any)?.role
+  const isSuperAdmin = currentUserRole === 'super_admin'
 
   // Client management state
   const [editingClientId, setEditingClientId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', email: '', company: '' })
+  const [editForm, setEditForm] = useState({ name: '', email: '', company: '', role: '' })
 
   // Invite state
-  const [inviteForm, setInviteForm] = useState({ email: '', name: '', company: '', password: '' })
+  const [inviteForm, setInviteForm] = useState({ email: '', name: '', company: '', password: '', role: 'user' })
   const [inviteResult, setInviteResult] = useState<any>(null)
 
   // Scenario filters
@@ -98,7 +102,7 @@ export default function AdminPanel() {
 
   // Update client mutation
   const updateClientMutation = useMutation({
-    mutationFn: async (data: { userId: string; name: string; email: string; company: string }) => {
+    mutationFn: async (data: { userId: string; name: string; email: string; company: string; role?: string }) => {
       const res = await fetch('/api/admin/clients', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -143,8 +147,9 @@ export default function AdminPanel() {
     onSuccess: (data) => {
       toast.success('Invite created!')
       setInviteResult(data)
-      setInviteForm({ email: '', name: '', company: '', password: '' })
+      setInviteForm({ email: '', name: '', company: '', password: '', role: 'user' })
       queryClient.invalidateQueries({ queryKey: ['admin-invites'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-clients'] })
     },
     onError: () => toast.error('Failed to create invite'),
   })
@@ -171,7 +176,7 @@ export default function AdminPanel() {
 
   const startEditClient = (client: any) => {
     setEditingClientId(client.id)
-    setEditForm({ name: client.name || '', email: client.email, company: client.company || '' })
+    setEditForm({ name: client.name || '', email: client.email, company: client.company || '', role: client.role || 'user' })
   }
 
   const saveEditClient = () => {
@@ -269,6 +274,7 @@ export default function AdminPanel() {
                             onEditFormChange={setEditForm}
                             onDelete={() => deleteClientMutation.mutate(client.id)}
                             saving={updateClientMutation.isPending}
+                            isSuperAdmin={isSuperAdmin}
                           />
                         ))}
                       </div>
@@ -293,6 +299,7 @@ export default function AdminPanel() {
                       onEditFormChange={setEditForm}
                       onDelete={() => deleteClientMutation.mutate(client.id)}
                       saving={updateClientMutation.isPending}
+                      isSuperAdmin={isSuperAdmin}
                     />
                   ))}
                 </div>
@@ -549,6 +556,22 @@ export default function AdminPanel() {
                     placeholder="(auto-generated if empty)"
                   />
                 </div>
+                {/* Role selection - only super_admin can create admins */}
+                {isSuperAdmin && (
+                  <div className="space-y-2">
+                    <Label className="text-sm">Role</Label>
+                    <Select value={inviteForm.role} onValueChange={value => setInviteForm(prev => ({ ...prev, role: value }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">User</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Admins can access the admin panel and manage scenarios.</p>
+                  </div>
+                )}
                 <Button
                   onClick={() => createInviteMutation.mutate(inviteForm)}
                   disabled={createInviteMutation.isPending}
@@ -660,16 +683,18 @@ function ClientRow({
   onEditFormChange,
   onDelete,
   saving,
+  isSuperAdmin,
 }: {
   client: any
   editingId: string | null
-  editForm: { name: string; email: string; company: string }
+  editForm: { name: string; email: string; company: string; role: string }
   onStartEdit: (client: any) => void
   onSaveEdit: () => void
   onCancelEdit: () => void
-  onEditFormChange: (form: { name: string; email: string; company: string }) => void
+  onEditFormChange: (form: { name: string; email: string; company: string; role: string }) => void
   onDelete: () => void
   saving: boolean
+  isSuperAdmin: boolean
 }) {
   const isEditing = editingId === client.id
 
@@ -695,6 +720,18 @@ function ClientRow({
             placeholder="Company"
             className="w-32 h-8 text-sm"
           />
+          {/* Role dropdown for super_admin only */}
+          {isSuperAdmin && (
+            <Select value={editForm.role} onValueChange={value => onEditFormChange({ ...editForm, role: value })}>
+              <SelectTrigger className="w-28 h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="user">User</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           <Button variant="ghost" size="sm" onClick={onSaveEdit} disabled={saving} className="h-7 w-7 p-0">
             <Check className="h-4 w-4 text-emerald" />
           </Button>
@@ -708,6 +745,7 @@ function ClientRow({
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">{client.name || 'Unnamed'}</span>
               <span className="text-xs text-muted-foreground">{client.email}</span>
+              <RoleBadge role={client.role} />
               <Badge variant="outline" className="text-[10px]">
                 {client._count?.scenarios || 0} scenarios
               </Badge>
@@ -745,5 +783,30 @@ function BuildingIcon({ className }: { className?: string }) {
       <path d="M8 10h.01" />
       <path d="M8 14h.01" />
     </svg>
+  )
+}
+
+// Role Badge Component
+function RoleBadge({ role }: { role: string }) {
+  if (role === 'super_admin') {
+    return (
+      <Badge className="text-[10px] bg-amber-500 text-white gap-0.5">
+        <Crown className="h-2.5 w-2.5" />
+        Super Admin
+      </Badge>
+    )
+  }
+  if (role === 'admin') {
+    return (
+      <Badge className="text-[10px] bg-vivid-blue text-white gap-0.5">
+        <Shield className="h-2.5 w-2.5" />
+        Admin
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="secondary" className="text-[10px]">
+      User
+    </Badge>
   )
 }

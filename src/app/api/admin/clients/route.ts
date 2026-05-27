@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 
 export async function GET(req: NextRequest) {
@@ -11,12 +11,12 @@ export async function GET(req: NextRequest) {
     }
 
     const userRole = (session.user as any).role
-    if (userRole !== 'admin') {
+    if (!isAdminRole(userRole)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const clients = await db.user.findMany({
-      where: { role: 'user' },
+      where: { role: { in: ['user', 'admin'] } },
       orderBy: { createdAt: 'desc' },
       include: {
         scenarios: {
@@ -47,7 +47,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const userRole = (session.user as any).role
-    if (userRole !== 'admin') {
+    if (!isAdminRole(userRole)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -62,6 +62,17 @@ export async function PUT(req: NextRequest) {
     if (name !== undefined) updateData.name = name
     if (email !== undefined) updateData.email = email
     if (company !== undefined) updateData.company = company
+
+    // Only super_admin can change roles
+    if (body.role !== undefined) {
+      if (body.role === 'super_admin') {
+        return NextResponse.json({ error: 'Cannot set role to super_admin' }, { status: 403 })
+      }
+      if (userRole !== 'super_admin') {
+        return NextResponse.json({ error: 'Only super admins can change user roles' }, { status: 403 })
+      }
+      updateData.role = body.role
+    }
 
     const user = await db.user.update({
       where: { id: userId },
@@ -83,7 +94,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     const userRole = (session.user as any).role
-    if (userRole !== 'admin') {
+    if (!isAdminRole(userRole)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

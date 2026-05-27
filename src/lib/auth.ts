@@ -3,6 +3,20 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 
+/**
+ * Check if a role has admin-level access (super_admin or admin)
+ */
+export function isAdminRole(role: string | undefined | null): boolean {
+  return role === 'super_admin' || role === 'admin'
+}
+
+/**
+ * Check if a role is the super admin
+ */
+export function isSuperAdminRole(role: string | undefined | null): boolean {
+  return role === 'super_admin'
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
