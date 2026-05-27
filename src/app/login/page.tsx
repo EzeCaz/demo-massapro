@@ -12,8 +12,8 @@ export default function LoginPageWrapper() {
   const hasChecked = useRef(false)
 
   useEffect(() => {
-    // Only redirect away from login if we're sure the user is authenticated
-    if (status === 'authenticated' && hasChecked.current) {
+    if (status === 'loading') return // Still loading, don't do anything yet
+    if (status === 'authenticated') {
       const userRole = (session?.user as any)?.role
       if (userRole === 'admin' || userRole === 'super_admin') {
         router.replace('/admin')

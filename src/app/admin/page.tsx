@@ -13,15 +13,14 @@ export default function AdminPage() {
   const hasCheckedAuth = useRef(false)
 
   useEffect(() => {
-    // Only redirect after session check has completed
-    if (status === 'unauthenticated' && hasCheckedAuth.current) {
-      router.replace('/login')
-    }
-    if (status === 'authenticated' && hasCheckedAuth.current) {
+    if (status === 'loading') return // Still loading, don't do anything yet
+    if (status === 'authenticated') {
       const userRole = (session?.user as any)?.role
       if (userRole !== 'admin' && userRole !== 'super_admin') {
         router.replace('/dashboard')
       }
+    } else if (status === 'unauthenticated') {
+      router.replace('/login')
     }
     if (status !== 'loading') {
       hasCheckedAuth.current = true

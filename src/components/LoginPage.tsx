@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { signIn, getSession } from 'next-auth/react'
 import { useLanguage } from '@/hooks/useLanguage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +12,6 @@ import { Eye, EyeOff, Mail, Lock, User, Building2 } from 'lucide-react'
 
 export default function LoginPage() {
   const { t } = useLanguage()
-  const router = useRouter()
   const [isSignUp, setIsSignUp] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -43,9 +41,16 @@ export default function LoginPage() {
         setLoading(false)
       } else {
         toast.success('Welcome back!')
-        // Use router.push for client-side navigation — avoids middleware issues
-        // and lets the SessionProvider update before navigation
-        router.push('/dashboard')
+        // Wait for the session to be fully established before navigating.
+        // getSession() forces a fresh fetch from the server, ensuring the JWT
+        // cookie is set and the role is available. This avoids the race condition
+        // where useSession() on the target page returns 'unauthenticated' briefly.
+        const session = await getSession()
+        const userRole = (session?.user as any)?.role
+        const target = (userRole === 'admin' || userRole === 'super_admin') ? '/admin' : '/dashboard'
+        // Use window.location.href for a hard navigation — this ensures the
+        // SessionProvider on the target page picks up the session cookie fresh.
+        window.location.href = target
       }
     } catch (error) {
       toast.error('An error occurred during sign in')

@@ -18,13 +18,19 @@ export default function DashboardPage() {
   // Only redirect to login AFTER the session check has completed and user is definitely unauthenticated
   // This prevents redirecting during the initial loading state
   useEffect(() => {
+    if (status === 'loading') return // Still loading, don't do anything yet
+    if (status === 'authenticated') {
+      const userRole = (session?.user as any)?.role
+      if (userRole === 'admin' || userRole === 'super_admin') {
+        router.replace('/admin')
+        return
+      }
+    }
     if (status === 'unauthenticated' && hasCheckedAuth.current) {
       router.replace('/login')
     }
-    if (status !== 'loading') {
-      hasCheckedAuth.current = true
-    }
-  }, [status, router])
+    hasCheckedAuth.current = true
+  }, [status, session, router])
 
   // Fetch scenarios
   const { data: scenarios = [], isLoading: scenariosLoading } = useQuery({
@@ -54,7 +60,7 @@ export default function DashboardPage() {
     )
   }
 
-  // Not authenticated — show loading while redirect happens
+  // Not authenticated or admin user being redirected — show loading while redirect happens
   if (status !== 'authenticated') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -65,7 +71,25 @@ export default function DashboardPage() {
             className="h-16 w-auto mx-auto mb-4"
           />
           <Loader2 className="h-8 w-8 animate-spin text-vivid-blue mx-auto" />
-          <p className="text-sm text-muted-foreground mt-3">Redirecting to login...</p>
+          <p className="text-sm text-muted-foreground mt-3">Loading MassaPro...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Admin/super_admin users should be on /admin — show spinner while redirecting
+  const userRole = (session?.user as any)?.role
+  if (userRole === 'admin' || userRole === 'super_admin') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <img
+            src="/massapro-logo.png"
+            alt="MassaPro"
+            className="h-16 w-auto mx-auto mb-4"
+          />
+          <Loader2 className="h-8 w-8 animate-spin text-vivid-blue mx-auto" />
+          <p className="text-sm text-muted-foreground mt-3">Redirecting to admin...</p>
         </div>
       </div>
     )

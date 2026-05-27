@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     }
 
     const clients = await db.user.findMany({
-      where: { role: { in: ['user', 'admin'] } },
+      where: { role: { in: ['user', 'admin', 'super_admin'] } },
       orderBy: { createdAt: 'desc' },
       include: {
         scenarios: {
@@ -103,6 +103,19 @@ export async function DELETE(req: NextRequest) {
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
+    }
+
+    // Prevent deletion of super_admin users
+    const targetUser = await db.user.findUnique({ where: { id: userId } })
+    if (!targetUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+    if (targetUser.role === 'super_admin') {
+      return NextResponse.json({ error: 'Cannot delete super admin users' }, { status: 403 })
+    }
+    // Only super_admin can delete admin users
+    if (targetUser.role === 'admin' && userRole !== 'super_admin') {
+      return NextResponse.json({ error: 'Only super admins can delete admin users' }, { status: 403 })
     }
 
     await db.user.delete({ where: { id: userId } })

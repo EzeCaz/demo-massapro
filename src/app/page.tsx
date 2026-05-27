@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
@@ -8,21 +8,18 @@ import { Loader2 } from 'lucide-react'
 export default function HomePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const hasChecked = useRef(false)
 
   useEffect(() => {
-    if (status === 'unauthenticated' && hasChecked.current) {
-      router.replace('/login')
-    } else if (status === 'authenticated' && hasChecked.current) {
+    if (status === 'loading') return // Still loading, don't do anything yet
+    if (status === 'authenticated') {
       const userRole = (session?.user as any)?.role
       if (userRole === 'admin' || userRole === 'super_admin') {
         router.replace('/admin')
       } else {
         router.replace('/dashboard')
       }
-    }
-    if (status !== 'loading') {
-      hasChecked.current = true
+    } else if (status === 'unauthenticated') {
+      router.replace('/login')
     }
   }, [status, session, router])
 

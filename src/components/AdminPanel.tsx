@@ -239,6 +239,15 @@ export default function AdminPanel() {
 
         {/* CLIENTS TAB */}
         <TabsContent value="clients" className="mt-4">
+          {isSuperAdmin && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Crown className="h-4 w-4 text-amber-600" />
+                <span className="text-sm font-medium text-amber-800">Super Admin Access</span>
+              </div>
+              <p className="text-xs text-amber-700 mt-1">You can create and manage admin users, change user roles, and manage all accounts.</p>
+            </div>
+          )}
           {clientsLoading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-vivid-blue" />
@@ -697,6 +706,13 @@ function ClientRow({
   isSuperAdmin: boolean
 }) {
   const isEditing = editingId === client.id
+  const isSuperAdminUser = client.role === 'super_admin'
+  const isAdminUser = client.role === 'admin'
+
+  // Super admin users cannot be edited or deleted
+  // Admin users can only be edited/deleted by super_admin
+  const canEdit = !isSuperAdminUser && (isSuperAdmin || !isAdminUser)
+  const canDelete = !isSuperAdminUser && (isSuperAdmin || !isAdminUser)
 
   return (
     <div className="flex items-center gap-2 p-2 border rounded-md">
@@ -751,17 +767,21 @@ function ClientRow({
               </Badge>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => onStartEdit(client)} className="h-7">
-            <Pencil className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => { if (confirm('Are you sure?')) onDelete() }}
-            className="h-7 text-destructive hover:text-destructive"
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
+          {canEdit && (
+            <Button variant="ghost" size="sm" onClick={() => onStartEdit(client)} className="h-7">
+              <Pencil className="h-3 w-3" />
+            </Button>
+          )}
+          {canDelete && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { if (confirm('Are you sure?')) onDelete() }}
+              className="h-7 text-destructive hover:text-destructive"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
         </>
       )}
     </div>
