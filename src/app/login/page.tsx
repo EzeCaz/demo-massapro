@@ -1,23 +1,32 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import LoginPage from '@/components/LoginPage'
 import { Loader2 } from 'lucide-react'
 
 export default function LoginPageWrapper() {
-  const { status } = useSession()
+  const { data: session, status } = useSession()
   const router = useRouter()
+  const hasChecked = useRef(false)
 
   useEffect(() => {
-    // If already authenticated, redirect to the right page
-    if (status === 'authenticated') {
-      router.replace('/dashboard')
+    // Only redirect away from login if we're sure the user is authenticated
+    if (status === 'authenticated' && hasChecked.current) {
+      const userRole = (session?.user as any)?.role
+      if (userRole === 'admin') {
+        router.replace('/admin')
+      } else {
+        router.replace('/dashboard')
+      }
     }
-  }, [status, router])
+    if (status !== 'loading') {
+      hasChecked.current = true
+    }
+  }, [status, session, router])
 
-  if (status === 'loading') {
+  if (status === 'loading' && !hasChecked.current) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-navy via-[#1E293B] to-[#0F172A]">
         <div className="text-center">
@@ -32,8 +41,21 @@ export default function LoginPageWrapper() {
     )
   }
 
+  // If authenticated, show loading while redirecting
   if (status === 'authenticated') {
-    return null // Will redirect
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-navy via-[#1E293B] to-[#0F172A]">
+        <div className="text-center">
+          <img
+            src="/massapro-logo.png"
+            alt="MassaPro"
+            className="h-16 w-auto mx-auto mb-4"
+          />
+          <Loader2 className="h-8 w-8 animate-spin text-white mx-auto" />
+          <p className="text-sm text-blue-200 mt-3">Redirecting...</p>
+        </div>
+      </div>
+    )
   }
 
   return <LoginPage />

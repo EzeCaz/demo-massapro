@@ -2,16 +2,18 @@
 
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import { useLanguage } from '@/hooks/useLanguage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { Eye, EyeOff, Mail, Lock, User, Building2 } from 'lucide-react'
 
 export default function LoginPage() {
   const { t } = useLanguage()
+  const router = useRouter()
   const [isSignUp, setIsSignUp] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -38,16 +40,18 @@ export default function LoginPage() {
       })
       if (result?.error) {
         toast.error('Invalid email or password')
+        setLoading(false)
       } else {
         toast.success('Welcome back!')
-        // Redirect to dashboard — the dashboard page will redirect admin users to /admin
-        window.location.href = '/dashboard'
+        // Use router.push for client-side navigation — avoids middleware issues
+        // and lets the SessionProvider update before navigation
+        router.push('/dashboard')
       }
     } catch (error) {
       toast.error('An error occurred during sign in')
-    } finally {
       setLoading(false)
     }
+    // Note: don't setLoading(false) on success — keep loading state while navigating
   }
 
   const handleSignUp = async (e: React.FormEvent) => {

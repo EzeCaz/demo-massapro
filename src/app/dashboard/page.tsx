@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
@@ -13,21 +13,18 @@ export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [showSetup, setShowSetup] = useState(false)
+  const hasCheckedAuth = useRef(false)
 
-  // Redirect unauthenticated users to login
+  // Only redirect to login AFTER the session check has completed and user is definitely unauthenticated
+  // This prevents redirecting during the initial loading state
   useEffect(() => {
-    if (status === 'unauthenticated') {
+    if (status === 'unauthenticated' && hasCheckedAuth.current) {
       router.replace('/login')
     }
-  }, [status, router])
-
-  // Redirect admin users to admin panel (they can switch back via header toggle)
-  useEffect(() => {
-    if (status === 'authenticated') {
-      const userRole = (session?.user as any)?.role
-      // Admins can still access dashboard via the header toggle, so don't redirect
+    if (status !== 'loading') {
+      hasCheckedAuth.current = true
     }
-  }, [status, session])
+  }, [status, router])
 
   // Fetch scenarios
   const { data: scenarios = [], isLoading: scenariosLoading } = useQuery({
@@ -41,7 +38,7 @@ export default function DashboardPage() {
   })
 
   // Show loading while session is being determined
-  if (status === 'loading' || (status === 'authenticated' && scenariosLoading)) {
+  if (status === 'loading' || (status === 'authenticated' && scenariosLoading && !showSetup)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -57,9 +54,21 @@ export default function DashboardPage() {
     )
   }
 
-  // Not authenticated — will redirect
+  // Not authenticated — show loading while redirect happens
   if (status !== 'authenticated') {
-    return null
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <img
+            src="/massapro-logo.png"
+            alt="MassaPro"
+            className="h-16 w-auto mx-auto mb-4"
+          />
+          <Loader2 className="h-8 w-8 animate-spin text-vivid-blue mx-auto" />
+          <p className="text-sm text-muted-foreground mt-3">Redirecting to login...</p>
+        </div>
+      </div>
+    )
   }
 
   // Determine if we should show setup wizard or dashboard

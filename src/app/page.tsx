@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
@@ -8,11 +8,12 @@ import { Loader2 } from 'lucide-react'
 export default function HomePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const hasChecked = useRef(false)
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
+    if (status === 'unauthenticated' && hasChecked.current) {
       router.replace('/login')
-    } else if (status === 'authenticated') {
+    } else if (status === 'authenticated' && hasChecked.current) {
       const userRole = (session?.user as any)?.role
       if (userRole === 'admin') {
         router.replace('/admin')
@@ -20,9 +21,11 @@ export default function HomePage() {
         router.replace('/dashboard')
       }
     }
+    if (status !== 'loading') {
+      hasChecked.current = true
+    }
   }, [status, session, router])
 
-  // Show loading while determining auth state
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-navy via-[#1E293B] to-[#0F172A]">
       <div className="text-center">

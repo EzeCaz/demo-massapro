@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import MassaProHeader from '@/components/MassaProHeader'
@@ -10,26 +10,26 @@ import { Loader2 } from 'lucide-react'
 export default function AdminPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const hasCheckedAuth = useRef(false)
 
-  // Redirect unauthenticated users to login
   useEffect(() => {
-    if (status === 'unauthenticated') {
+    // Only redirect after session check has completed
+    if (status === 'unauthenticated' && hasCheckedAuth.current) {
       router.replace('/login')
     }
-  }, [status, router])
-
-  // Redirect non-admin users to dashboard
-  useEffect(() => {
-    if (status === 'authenticated') {
+    if (status === 'authenticated' && hasCheckedAuth.current) {
       const userRole = (session?.user as any)?.role
       if (userRole !== 'admin') {
         router.replace('/dashboard')
       }
     }
+    if (status !== 'loading') {
+      hasCheckedAuth.current = true
+    }
   }, [status, session, router])
 
   // Show loading while session is being determined
-  if (status === 'loading' || (status === 'authenticated' && (session?.user as any)?.role !== 'admin')) {
+  if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -45,9 +45,21 @@ export default function AdminPage() {
     )
   }
 
-  // Not authenticated — will redirect
-  if (status !== 'authenticated') {
-    return null
+  // Not authenticated or not admin — show loading while redirect happens
+  if (status !== 'authenticated' || (session?.user as any)?.role !== 'admin') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <img
+            src="/massapro-logo.png"
+            alt="MassaPro"
+            className="h-16 w-auto mx-auto mb-4"
+          />
+          <Loader2 className="h-8 w-8 animate-spin text-vivid-blue mx-auto" />
+          <p className="text-sm text-muted-foreground mt-3">Redirecting...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
