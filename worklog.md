@@ -57,3 +57,25 @@ Stage Summary:
 - Login redirect loop fixed by using getSession() + window.location.href instead of router.push
 - eze@massapro.com is super_admin and can create/manage admins and users
 - Super admin has: role management in client editing, role selection in invite creation, protection for admin/super_admin accounts
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix "too many redirects" error after login
+
+Work Log:
+- Identified root cause: NEXTAUTH_URL=http://localhost:3000 in .env was wrong for the preview environment
+- Identified race condition: after signIn() with redirect:false, window.location.href navigates before session is fully available, causing target page to redirect back to login
+- Fixed .env: removed NEXTAUTH_URL=http://localhost:3000 (NextAuth infers URL from request headers)
+- Changed login flow: switched from signIn(redirect:false) + manual navigation to signIn(redirect:true, callbackUrl:'/'), which is NextAuth's standard mechanism that properly handles cookie setting and redirects
+- Simplified all page components: replaced router.replace() with window.location.href for redirects to avoid client-side routing loops where useSession() returns stale data
+- Added hasRedirected refs to prevent double redirects
+- Added error handling for NextAuth URL params (error=CredentialsSignin)
+- Changed SessionProvider refetchInterval from 5 minutes to 60 seconds
+- Build verified successfully
+
+Stage Summary:
+- Login now uses NextAuth's built-in redirect mechanism (signIn with redirect:true, callbackUrl:'/')
+- After login, NextAuth redirects to '/' which then routes to /admin or /dashboard based on role
+- All redirects use window.location.href (hard navigation) instead of router.replace() to avoid session timing issues
+- NEXTAUTH_URL removed from .env to allow dynamic URL inference

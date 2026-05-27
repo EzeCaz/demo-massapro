@@ -2,33 +2,32 @@
 
 import { useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
 import MassaProHeader from '@/components/MassaProHeader'
 import AdminPanel from '@/components/AdminPanel'
 import { Loader2 } from 'lucide-react'
 
 export default function AdminPage() {
   const { data: session, status } = useSession()
-  const router = useRouter()
-  const hasCheckedAuth = useRef(false)
+  const hasRedirected = useRef(false)
 
+  // Handle auth redirects — use hard navigation to avoid client-side routing loops
   useEffect(() => {
-    if (status === 'loading') return // Still loading, don't do anything yet
+    if (status === 'loading' || hasRedirected.current) return
+
     if (status === 'authenticated') {
       const userRole = (session?.user as any)?.role
       if (userRole !== 'admin' && userRole !== 'super_admin') {
-        router.replace('/dashboard')
+        hasRedirected.current = true
+        window.location.href = '/dashboard'
       }
     } else if (status === 'unauthenticated') {
-      router.replace('/login')
+      hasRedirected.current = true
+      window.location.href = '/login'
     }
-    if (status !== 'loading') {
-      hasCheckedAuth.current = true
-    }
-  }, [status, session, router])
+  }, [status, session])
 
-  // Show loading while session is being determined
-  if (status === 'loading') {
+  // Show loading while session is being determined or redirecting
+  if (status !== 'authenticated') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -44,8 +43,9 @@ export default function AdminPage() {
     )
   }
 
-  // Not authenticated or not admin — show loading while redirect happens
-  if (status !== 'authenticated' || ((session?.user as any)?.role !== 'admin' && (session?.user as any)?.role !== 'super_admin')) {
+  // Check role — show spinner while redirecting non-admin users
+  const userRole = (session?.user as any)?.role
+  if (userRole !== 'admin' && userRole !== 'super_admin') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">

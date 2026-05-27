@@ -1,32 +1,32 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { useEffect, useRef } from 'react'
 import LoginPage from '@/components/LoginPage'
 import { Loader2 } from 'lucide-react'
 
 export default function LoginPageWrapper() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const hasChecked = useRef(false)
+  const hasRedirected = useRef(false)
 
+  // If user is already authenticated, redirect them away from the login page.
+  // This handles the case where an authenticated user navigates to /login directly.
   useEffect(() => {
-    if (status === 'loading') return // Still loading, don't do anything yet
-    if (status === 'authenticated') {
+    if (status === 'authenticated' && !hasRedirected.current) {
+      hasRedirected.current = true
       const userRole = (session?.user as any)?.role
       if (userRole === 'admin' || userRole === 'super_admin') {
-        router.replace('/admin')
+        window.location.href = '/admin'
       } else {
-        router.replace('/dashboard')
+        window.location.href = '/dashboard'
       }
     }
-    if (status !== 'loading') {
-      hasChecked.current = true
-    }
-  }, [status, session, router])
+  }, [status, session])
 
-  if (status === 'loading' && !hasChecked.current) {
+  // Show loading spinner while checking session (very brief)
+  if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-navy via-[#1E293B] to-[#0F172A]">
         <div className="text-center">
@@ -41,7 +41,7 @@ export default function LoginPageWrapper() {
     )
   }
 
-  // If authenticated, show loading while redirecting
+  // If authenticated, show spinner while redirect happens
   if (status === 'authenticated') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-navy via-[#1E293B] to-[#0F172A]">

@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import MassaProHeader from '@/components/MassaProHeader'
 import SetupWizard from '@/components/SetupWizard'
@@ -11,26 +10,26 @@ import { Loader2 } from 'lucide-react'
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
-  const router = useRouter()
   const [showSetup, setShowSetup] = useState(false)
-  const hasCheckedAuth = useRef(false)
+  const hasRedirected = useRef(false)
 
-  // Only redirect to login AFTER the session check has completed and user is definitely unauthenticated
-  // This prevents redirecting during the initial loading state
+  // Handle auth redirects — use hard navigation (window.location) to avoid
+  // client-side routing loops where useSession() returns stale data
   useEffect(() => {
-    if (status === 'loading') return // Still loading, don't do anything yet
+    if (status === 'loading' || hasRedirected.current) return
+
     if (status === 'authenticated') {
       const userRole = (session?.user as any)?.role
       if (userRole === 'admin' || userRole === 'super_admin') {
-        router.replace('/admin')
+        hasRedirected.current = true
+        window.location.href = '/admin'
         return
       }
+    } else if (status === 'unauthenticated') {
+      hasRedirected.current = true
+      window.location.href = '/login'
     }
-    if (status === 'unauthenticated' && hasCheckedAuth.current) {
-      router.replace('/login')
-    }
-    hasCheckedAuth.current = true
-  }, [status, session, router])
+  }, [status, session])
 
   // Fetch scenarios
   const { data: scenarios = [], isLoading: scenariosLoading } = useQuery({
@@ -43,8 +42,8 @@ export default function DashboardPage() {
     enabled: status === 'authenticated',
   })
 
-  // Show loading while session is being determined
-  if (status === 'loading' || (status === 'authenticated' && scenariosLoading && !showSetup)) {
+  // Show loading while session is being determined or redirecting
+  if (status === 'loading' || status !== 'authenticated' || (status === 'authenticated' && scenariosLoading && !showSetup)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -55,41 +54,6 @@ export default function DashboardPage() {
           />
           <Loader2 className="h-8 w-8 animate-spin text-vivid-blue mx-auto" />
           <p className="text-sm text-muted-foreground mt-3">Loading MassaPro...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Not authenticated or admin user being redirected — show loading while redirect happens
-  if (status !== 'authenticated') {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <img
-            src="/massapro-logo.png"
-            alt="MassaPro"
-            className="h-16 w-auto mx-auto mb-4"
-          />
-          <Loader2 className="h-8 w-8 animate-spin text-vivid-blue mx-auto" />
-          <p className="text-sm text-muted-foreground mt-3">Loading MassaPro...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Admin/super_admin users should be on /admin — show spinner while redirecting
-  const userRole = (session?.user as any)?.role
-  if (userRole === 'admin' || userRole === 'super_admin') {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <img
-            src="/massapro-logo.png"
-            alt="MassaPro"
-            className="h-16 w-auto mx-auto mb-4"
-          />
-          <Loader2 className="h-8 w-8 animate-spin text-vivid-blue mx-auto" />
-          <p className="text-sm text-muted-foreground mt-3">Redirecting to admin...</p>
         </div>
       </div>
     )

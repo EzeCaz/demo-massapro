@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { signIn, getSession } from 'next-auth/react'
+import { useState, useEffect } from 'react'
+import { signIn } from 'next-auth/react'
 import { useLanguage } from '@/hooks/useLanguage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,6 +23,21 @@ export default function LoginPage() {
     confirmPassword: '',
   })
 
+  // Check for NextAuth error in URL params (from failed redirect-based sign-in)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const error = params.get('error')
+    if (error) {
+      if (error === 'CredentialsSignin') {
+        toast.error('Invalid email or password')
+      } else {
+        toast.error('Authentication failed. Please try again.')
+      }
+      // Clean up the URL without causing a re-render loop
+      window.history.replaceState({}, '', '/login')
+    }
+  }, [])
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.email || !form.password) {
@@ -30,33 +45,26 @@ export default function LoginPage() {
       return
     }
     setLoading(true)
-    try {
-      const result = await signIn('credentials', {
-        email: form.email,
-        password: form.password,
-        redirect: false,
-      })
-      if (result?.error) {
-        toast.error('Invalid email or password')
-        setLoading(false)
-      } else {
-        toast.success('Welcome back!')
-        // Wait for the session to be fully established before navigating.
-        // getSession() forces a fresh fetch from the server, ensuring the JWT
-        // cookie is set and the role is available. This avoids the race condition
-        // where useSession() on the target page returns 'unauthenticated' briefly.
-        const session = await getSession()
-        const userRole = (session?.user as any)?.role
-        const target = (userRole === 'admin' || userRole === 'super_admin') ? '/admin' : '/dashboard'
-        // Use window.location.href for a hard navigation — this ensures the
-        // SessionProvider on the target page picks up the session cookie fresh.
-        window.location.href = target
-      }
-    } catch (error) {
-      toast.error('An error occurred during sign in')
-      setLoading(false)
-    }
-    // Note: don't setLoading(false) on success — keep loading state while navigating
+
+    // Use NextAuth's built-in redirect mechanism (redirect: true is the default).
+    // This is the most reliable way to handle sign-in because:
+    // 1. NextAuth handles cookie setting properly
+    // 2. The browser follows the redirect natively, so cookies are guaranteed to be set
+    // 3. No race conditions between session availability and page navigation
+    //
+    // After successful sign-in, NextAuth redirects to callbackUrl ('/' = root page).
+    // The root page then checks the session and redirects to /admin or /dashboard.
+    //
+    // If sign-in fails, NextAuth redirects to /login?error=CredentialsSignin.
+    // We handle this in the useEffect above.
+    await signIn('credentials', {
+      email: form.email,
+      password: form.password,
+      callbackUrl: '/',
+    })
+
+    // Note: Code after signIn() with redirect: true may not execute
+    // because the browser navigates away. That's expected.
   }
 
   const handleSignUp = async (e: React.FormEvent) => {
