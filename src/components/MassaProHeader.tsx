@@ -1,10 +1,11 @@
 'use client'
 
 import { useLanguage } from '@/hooks/useLanguage'
-import { useAppStore } from '@/lib/store'
 import { signOut, useSession } from 'next-auth/react'
 import { Globe, LogOut, Shield, LayoutDashboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,8 +17,8 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
 export default function MassaProHeader() {
   const { language, setLanguage, t } = useLanguage()
-  const { currentView, setCurrentView } = useAppStore()
   const { data: session } = useSession()
+  const pathname = usePathname()
 
   const userRole = (session?.user as any)?.role
   const userName = session?.user?.name || session?.user?.email || ''
@@ -27,40 +28,42 @@ export default function MassaProHeader() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left: Logo + Brand */}
-          <div className="flex items-center gap-3">
+          <Link href={userRole === 'admin' ? '/admin' : '/dashboard'} className="flex items-center gap-3">
             <img
               src="/massapro-logo.png"
               alt="MassaPro Logo"
               className="h-10 w-auto"
             />
-            <span className="text-xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-montserrat)' }}>
+            <span className="text-xl font-bold tracking-tight text-white" style={{ fontFamily: 'var(--font-montserrat)' }}>
               MassaPro
             </span>
-          </div>
+          </Link>
 
           {/* Right: Nav + Language + User */}
           <div className="flex items-center gap-2 sm:gap-4">
             {/* View Toggle (Admin) */}
             {userRole === 'admin' && (
               <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1">
-                <Button
-                  variant={currentView === 'admin' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setCurrentView('admin')}
-                  className={`text-xs sm:text-sm ${currentView === 'admin' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
-                >
-                  <Shield className="h-4 w-4 mr-1" />
-                  <span className="hidden sm:inline">{t('header.admin')}</span>
-                </Button>
-                <Button
-                  variant={currentView === 'dashboard' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setCurrentView('dashboard')}
-                  className={`text-xs sm:text-sm ${currentView === 'dashboard' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
-                >
-                  <LayoutDashboard className="h-4 w-4 mr-1" />
-                  <span className="hidden sm:inline">{t('header.dashboard')}</span>
-                </Button>
+                <Link href="/admin">
+                  <Button
+                    variant={pathname === '/admin' ? 'default' : 'ghost'}
+                    size="sm"
+                    className={`text-xs sm:text-sm ${pathname === '/admin' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+                  >
+                    <Shield className="h-4 w-4 mr-1" />
+                    <span className="hidden sm:inline">{t('header.admin')}</span>
+                  </Button>
+                </Link>
+                <Link href="/dashboard">
+                  <Button
+                    variant={pathname === '/dashboard' ? 'default' : 'ghost'}
+                    size="sm"
+                    className={`text-xs sm:text-sm ${pathname === '/dashboard' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+                  >
+                    <LayoutDashboard className="h-4 w-4 mr-1" />
+                    <span className="hidden sm:inline">{t('header.dashboard')}</span>
+                  </Button>
+                </Link>
               </div>
             )}
 
@@ -110,7 +113,7 @@ export default function MassaProHeader() {
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => signOut({ callbackUrl: '/' })}
+                  onClick={() => signOut({ callbackUrl: '/login' })}
                   className="text-destructive focus:text-destructive cursor-pointer"
                 >
                   <LogOut className="h-4 w-4 mr-2" />

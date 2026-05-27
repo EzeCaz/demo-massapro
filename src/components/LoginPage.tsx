@@ -40,10 +40,8 @@ export default function LoginPage() {
         toast.error('Invalid email or password')
       } else {
         toast.success('Welcome back!')
-        // Use a small delay to let the session cookie settle, then redirect
-        setTimeout(() => {
-          window.location.href = '/'
-        }, 500)
+        // Redirect to dashboard — the dashboard page will redirect admin users to /admin
+        window.location.href = '/dashboard'
       }
     } catch (error) {
       toast.error('An error occurred during sign in')

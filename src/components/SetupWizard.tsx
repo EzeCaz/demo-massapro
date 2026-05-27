@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { toast } from 'sonner'
 import { ChevronDown, ChevronRight, Plus, Trash2, Loader2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface SetupWizardProps {
   onComplete: () => void
@@ -26,6 +27,7 @@ interface ScenarioEntry {
 
 export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const { t } = useLanguage()
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [scenarioCount, setScenarioCount] = useState(1)
   const [scenarios, setScenarios] = useState<ScenarioEntry[]>([
@@ -112,6 +114,10 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       if (res.ok) {
         toast.success('Scenarios created successfully!')
         onComplete()
+        // Also do a full page reload to dashboard to ensure fresh data
+        setTimeout(() => {
+          router.push('/dashboard')
+        }, 500)
       } else {
         const data = await res.json()
         toast.error(data.error || 'Failed to create scenarios')

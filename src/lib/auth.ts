@@ -61,7 +61,7 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: {
-    signIn: '/',
+    signIn: '/login',
   },
   secret: process.env.NEXTAUTH_SECRET || 'massapro-secret-key-change-in-production',
 }
