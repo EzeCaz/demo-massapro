@@ -40,7 +40,10 @@ export default function LoginPage() {
         toast.error('Invalid email or password')
       } else {
         toast.success('Welcome back!')
-        window.location.reload()
+        // Use a small delay to let the session cookie settle, then redirect
+        setTimeout(() => {
+          window.location.href = '/'
+        }, 500)
       }
     } catch (error) {
       toast.error('An error occurred during sign in')
@@ -217,12 +220,12 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
-                className="w-full bg-vivid-blue hover:bg-blue-700 text-white"
+                className="w-full bg-white border-2 border-purple-600 text-purple-600 hover:bg-purple-50"
                 disabled={loading}
               >
                 {loading ? (
                   <span className="flex items-center gap-2">
-                    <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span className="h-4 w-4 border-2 border-purple-200 border-t-purple-600 rounded-full animate-spin" />
                     {t('general.loading')}
                   </span>
                 ) : isSignUp ? (

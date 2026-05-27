@@ -43,8 +43,10 @@ export default function Home() {
   const targetView = useMemo(() => {
     if (status === 'loading') return currentView
     if (status === 'unauthenticated') return 'login' as const
+
+    // Authenticated user — never go back to login
     if (currentView === 'shared') return 'shared' as const
-    if (scenariosLoading) return currentView
+    if (scenariosLoading && currentView !== 'login') return currentView
 
     const userRole = (session?.user as any)?.role
     if (userRole === 'admin') {
@@ -62,8 +64,9 @@ export default function Home() {
     }
   }, [targetView, currentView, setCurrentView])
 
-  // Loading state
-  if (status === 'loading' || (status === 'authenticated' && scenariosLoading && currentView !== 'shared' && currentView !== 'admin')) {
+  // Loading state - show spinner while session or scenarios are loading
+  // Also show spinner if authenticated but view hasn't been computed yet (still 'login')
+  if (status === 'loading' || (status === 'authenticated' && (scenariosLoading || currentView === 'login') && currentView !== 'shared' && currentView !== 'admin' && currentView !== 'dashboard')) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -80,7 +83,7 @@ export default function Home() {
   }
 
   // Not authenticated - show login
-  if (status === 'unauthenticated' || currentView === 'login') {
+  if (status === 'unauthenticated') {
     return <LoginPage />
   }
 
