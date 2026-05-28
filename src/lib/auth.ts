@@ -18,6 +18,10 @@ export function isSuperAdminRole(role: string | undefined | null): boolean {
 }
 
 export const authOptions: NextAuthOptions = {
+  // Trust the proxy headers (x-forwarded-host, x-forwarded-proto) so that
+  // NextAuth correctly identifies the host and protocol in preview/Vercel environments.
+  trustHost: true,
+
   providers: [
     CredentialsProvider({
       name: 'Credentials',
@@ -58,18 +62,23 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async jwt({ token, user }) {
+      // Only set custom properties when user object is available (on sign-in)
       if (user) {
-        token.role = (user as any).role
-        token.company = (user as any).company
+        // Use explicit property assignment to avoid minification issues
+        const userData = user as Record<string, unknown>
+        token.userRole = userData.role as string
+        token.userCompany = userData.company as string
         token.userId = user.id
       }
       return token
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).role = token.role
-        (session.user as any).company = token.company
-        (session.user as any).id = token.userId
+        // Transfer custom properties from token to session
+        const sessionUser = session.user as Record<string, unknown>
+        sessionUser.role = token.userRole
+        sessionUser.company = token.userCompany
+        sessionUser.id = token.userId
       }
       return session
     },

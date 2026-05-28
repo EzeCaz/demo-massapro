@@ -1,23 +1,21 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 
 export default function HomePage() {
   const { data: session, status } = useSession()
-  const router = useRouter()
   const hasRedirected = useRef(false)
 
   useEffect(() => {
-    // Wait for session to finish loading before deciding where to go
+    // Don't redirect while session is still loading or if we've already kicked off a redirect
     if (status === 'loading' || hasRedirected.current) return
 
     hasRedirected.current = true
 
-    if (status === 'authenticated') {
-      const userRole = (session?.user as any)?.role
+    if (status === 'authenticated' && session?.user) {
+      const userRole = (session.user as any)?.role
       if (userRole === 'admin' || userRole === 'super_admin') {
         window.location.href = '/admin'
       } else {

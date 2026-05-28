@@ -23,20 +23,7 @@ export default function LoginPage() {
     confirmPassword: '',
   })
 
-  // Check for NextAuth error in URL params (from failed redirect-based sign-in)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const error = params.get('error')
-    if (error) {
-      if (error === 'CredentialsSignin') {
-        toast.error('Invalid email or password')
-      } else {
-        toast.error('Authentication failed. Please try again.')
-      }
-      // Clean up the URL without causing a re-render loop
-      window.history.replaceState({}, '', '/login')
-    }
-  }, [])
+  // No URL error param handling needed — we use redirect: false and show errors inline
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,25 +33,33 @@ export default function LoginPage() {
     }
     setLoading(true)
 
-    // Use NextAuth's built-in redirect mechanism (redirect: true is the default).
-    // This is the most reliable way to handle sign-in because:
-    // 1. NextAuth handles cookie setting properly
-    // 2. The browser follows the redirect natively, so cookies are guaranteed to be set
-    // 3. No race conditions between session availability and page navigation
-    //
-    // After successful sign-in, NextAuth redirects to callbackUrl ('/' = root page).
-    // The root page then checks the session and redirects to /admin or /dashboard.
-    //
-    // If sign-in fails, NextAuth redirects to /login?error=CredentialsSignin.
-    // We handle this in the useEffect above.
-    await signIn('credentials', {
-      email: form.email,
-      password: form.password,
-      callbackUrl: '/',
-    })
+    try {
+      // Use redirect: false so we have full control over the post-login navigation.
+      // This avoids NextAuth constructing redirect URLs that may point to the wrong host
+      // (e.g., localhost) in preview/proxy environments.
+      const result = await signIn('credentials', {
+        redirect: false,
+        email: form.email,
+        password: form.password,
+      })
 
-    // Note: Code after signIn() with redirect: true may not execute
-    // because the browser navigates away. That's expected.
+      if (result?.error) {
+        toast.error('Invalid email or password')
+        setLoading(false)
+        return
+      }
+
+      // Sign-in succeeded. The session cookie is now set.
+      // Use a small delay to ensure the cookie is fully persisted, then hard-navigate.
+      // Hard navigation (window.location.href) ensures the session is re-read from cookies
+      // and avoids stale client-side session state.
+      setTimeout(() => {
+        window.location.href = '/'
+      }, 200)
+    } catch (err) {
+      toast.error('An error occurred during sign-in')
+      setLoading(false)
+    }
   }
 
   const handleSignUp = async (e: React.FormEvent) => {
