@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { signIn } from 'next-auth/react'
+import { useState } from 'react'
+import { signIn, getSession } from 'next-auth/react'
 import { useLanguage } from '@/hooks/useLanguage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,8 +23,6 @@ export default function LoginPage() {
     confirmPassword: '',
   })
 
-  // No URL error param handling needed — we use redirect: false and show errors inline
-
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.email || !form.password) {
@@ -34,9 +32,9 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      // Use redirect: false so we have full control over the post-login navigation.
-      // This avoids NextAuth constructing redirect URLs that may point to the wrong host
-      // (e.g., localhost) in preview/proxy environments.
+      // Use redirect: false so we control the post-login navigation.
+      // This avoids NextAuth constructing redirect URLs that may point to
+      // the wrong host in preview/proxy environments.
       const result = await signIn('credentials', {
         redirect: false,
         email: form.email,
@@ -49,13 +47,31 @@ export default function LoginPage() {
         return
       }
 
-      // Sign-in succeeded. The session cookie is now set.
-      // Use a small delay to ensure the cookie is fully persisted, then hard-navigate.
-      // Hard navigation (window.location.href) ensures the session is re-read from cookies
-      // and avoids stale client-side session state.
-      setTimeout(() => {
+      // Sign-in succeeded — the session cookie is now set.
+      // Fetch the session directly to determine where to navigate.
+      // We retry up to 5 times with a small delay because the session
+      // endpoint may need a moment to reflect the newly created session.
+      let session = null
+      for (let i = 0; i < 5; i++) {
+        session = await getSession()
+        if (session?.user) break
+        await new Promise(r => setTimeout(r, 300))
+      }
+
+      // Navigate directly to the correct page based on role.
+      // This avoids going through the root page redirect which can
+      // cause a redirect loop if useSession() hasn't updated yet.
+      if (session?.user) {
+        const userRole = (session.user as any)?.role
+        if (userRole === 'admin' || userRole === 'super_admin') {
+          window.location.href = '/admin'
+        } else {
+          window.location.href = '/dashboard'
+        }
+      } else {
+        // Fallback: go to root which will figure it out
         window.location.href = '/'
-      }, 200)
+      }
     } catch (err) {
       toast.error('An error occurred during sign-in')
       setLoading(false)

@@ -114,7 +114,10 @@ export default function MassaProHeader() {
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => signOut({ callbackUrl: '/login' })}
+                  onClick={async () => {
+                    await signOut({ redirect: false })
+                    window.location.href = '/login'
+                  }}
                   className="text-destructive focus:text-destructive cursor-pointer"
                 >
                   <LogOut className="h-4 w-4 mr-2" />
