@@ -59,7 +59,10 @@ test
 prompt
 /skills/
 /prisma/dev.db
+/prisma/massapro.db
+/prisma/*.db
 /db/
+*.db
 /worklog.md
 /download/
 /agent-ctx/
