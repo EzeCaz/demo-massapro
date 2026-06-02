@@ -1,30 +1,16 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
-import { execSync } from 'child_process'
 
 /**
- * Initialize the database — creates tables and seeds default users.
+ * Initialize the database — seeds default users.
  * Safe to call multiple times (idempotent).
  *
- * This endpoint exists as a fallback for when the instrumentation.ts
- * startup initialization fails or is skipped.
+ * Schema migrations are handled by `prisma migrate deploy` during the build.
+ * This endpoint only handles data seeding.
  */
 export async function POST() {
   try {
-    // Step 1: Ensure tables exist by running prisma db push
-    try {
-      execSync('npx prisma db push --skip-generate --accept-data-loss', {
-        stdio: 'pipe',
-        env: { ...process.env },
-        timeout: 30000,
-      })
-    } catch (pushError: any) {
-      console.error('[init] prisma db push failed:', pushError.message)
-      // Continue anyway — tables might already exist
-    }
-
-    // Step 2: Seed default users
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'eze@massapro.com'
     const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD || 'MassaPro2024!'
 
@@ -50,7 +36,6 @@ export async function POST() {
       })
     }
 
-    // Create admin user if not exists
     const adminEmail = 'admin@massapro.com'
     const existingAdmin = await db.user.findUnique({
       where: { email: adminEmail },

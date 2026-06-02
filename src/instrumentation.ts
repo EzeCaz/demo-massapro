@@ -1,29 +1,31 @@
 /**
  * Next.js Instrumentation — runs once when the server starts.
- * Checks if the database is initialized and seeds default users.
+ * Checks if the database has been seeded and creates default users if needed.
  *
- * For table creation, we rely on the build script (prisma db push)
- * and the /api/init endpoint as a fallback.
+ * With PostgreSQL, the database schema is managed by Prisma migrations
+ * (run during build or via `prisma migrate deploy`), so we only need to
+ * seed the default users here.
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     console.log('[instrumentation] Checking database...')
-    checkAndSeed().catch((error) => {
+    seedIfNeeded().catch((error) => {
       console.error('[instrumentation] Error:', error?.message || error)
     })
   }
 }
 
-async function checkAndSeed() {
+async function seedIfNeeded() {
   try {
     const { db } = await import('@/lib/db')
 
-    // Quick check — does the User table exist?
+    // Check if any users exist
     let userCount: number
     try {
       userCount = await db.user.count()
-    } catch {
-      console.log('[instrumentation] User table missing — call POST /api/init to set up')
+    } catch (error: any) {
+      console.error('[instrumentation] Cannot connect to database:', error.message)
+      console.error('[instrumentation] Make sure DATABASE_URL is set correctly')
       return
     }
 
@@ -33,7 +35,7 @@ async function checkAndSeed() {
     }
 
     // No users — seed the database
-    console.log('[instrumentation] No users found — seeding...')
+    console.log('[instrumentation] No users found — seeding default users...')
     const bcrypt = await import('bcryptjs')
 
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'eze@massapro.com'
@@ -65,6 +67,6 @@ async function checkAndSeed() {
     const finalCount = await db.user.count()
     console.log(`[instrumentation] Database seeded — ${finalCount} users`)
   } catch (error: any) {
-    console.error('[instrumentation] Check error:', error.message)
+    console.error('[instrumentation] Seed error:', error.message)
   }
 }
