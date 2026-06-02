@@ -1,12 +1,30 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
+import { execSync } from 'child_process'
 
-// This endpoint initializes the database with required seed data.
-// It's safe to call multiple times - it will not duplicate data.
+/**
+ * Initialize the database — creates tables and seeds default users.
+ * Safe to call multiple times (idempotent).
+ *
+ * This endpoint exists as a fallback for when the instrumentation.ts
+ * startup initialization fails or is skipped.
+ */
 export async function POST() {
   try {
-    // Check if super admin exists
+    // Step 1: Ensure tables exist by running prisma db push
+    try {
+      execSync('npx prisma db push --skip-generate --accept-data-loss', {
+        stdio: 'pipe',
+        env: { ...process.env },
+        timeout: 30000,
+      })
+    } catch (pushError: any) {
+      console.error('[init] prisma db push failed:', pushError.message)
+      // Continue anyway — tables might already exist
+    }
+
+    // Step 2: Seed default users
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'eze@massapro.com'
     const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD || 'MassaPro2024!'
 
@@ -64,5 +82,23 @@ export async function POST() {
       success: false,
       error: error.message,
     }, { status: 500 })
+  }
+}
+
+/**
+ * GET handler — check if database is initialized
+ */
+export async function GET() {
+  try {
+    const userCount = await db.user.count()
+    return NextResponse.json({
+      initialized: true,
+      userCount,
+    })
+  } catch {
+    return NextResponse.json({
+      initialized: false,
+      userCount: 0,
+    })
   }
 }

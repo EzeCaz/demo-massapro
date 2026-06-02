@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn, getSession } from 'next-auth/react'
+import { signIn } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import { useLanguage } from '@/hooks/useLanguage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +13,7 @@ import { Eye, EyeOff, Mail, Lock, User, Building2 } from 'lucide-react'
 
 export default function LoginPage() {
   const { t } = useLanguage()
+  const router = useRouter()
   const [isSignUp, setIsSignUp] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -32,9 +34,6 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      // Use redirect: false so we control the post-login navigation.
-      // This avoids NextAuth constructing redirect URLs that may point to
-      // the wrong host in preview/proxy environments.
       const result = await signIn('credentials', {
         redirect: false,
         email: form.email,
@@ -47,30 +46,28 @@ export default function LoginPage() {
         return
       }
 
-      // Sign-in succeeded — the session cookie is now set.
-      // Fetch the session directly to determine where to navigate.
-      // We retry up to 5 times with a small delay because the session
-      // endpoint may need a moment to reflect the newly created session.
-      let session = null
-      for (let i = 0; i < 5; i++) {
-        session = await getSession()
-        if (session?.user) break
-        await new Promise(r => setTimeout(r, 300))
-      }
+      // Sign-in succeeded — use hard navigation (window.location.href) to force
+      // a full page reload. Client-side router.push() can cause redirect loops
+      // because the useSession() hook may still return stale "unauthenticated"
+      // state before the session cookie has fully propagated through the
+      // NextAuth provider chain. A hard reload ensures the server reads the
+      // fresh session cookie directly.
+      await new Promise(r => setTimeout(r, 300))
 
-      // Navigate directly to the correct page based on role.
-      // This avoids going through the root page redirect which can
-      // cause a redirect loop if useSession() hasn't updated yet.
-      if (session?.user) {
-        const userRole = (session.user as any)?.role
+      // Fetch the session to determine where to redirect
+      try {
+        const sessionRes = await fetch('/api/auth/session')
+        const sessionData = await sessionRes.json()
+        const userRole = sessionData?.user?.role
+
         if (userRole === 'admin' || userRole === 'super_admin') {
           window.location.href = '/admin'
         } else {
           window.location.href = '/dashboard'
         }
-      } else {
-        // Fallback: go to root which will figure it out
-        window.location.href = '/'
+      } catch {
+        // Fallback — go to dashboard (server-side root redirect will fix it)
+        window.location.href = '/dashboard'
       }
     } catch (err) {
       toast.error('An error occurred during sign-in')

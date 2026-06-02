@@ -11,10 +11,12 @@ export async function GET() {
       users: userCount,
     })
   } catch (error: any) {
+    // Database not initialized — return error with helpful info
     return NextResponse.json({
       status: 'error',
-      database: 'disconnected',
+      database: 'not_initialized',
       error: error.message,
-    }, { status: 500 })
+      hint: 'Call POST /api/init to initialize the database',
+    }, { status: 503 })
   }
 }

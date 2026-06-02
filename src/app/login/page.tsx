@@ -9,11 +9,13 @@ export default function LoginPageWrapper() {
   const { data: session, status } = useSession()
   const hasRedirected = useRef(false)
 
-  // If user is already authenticated, redirect them away from the login page
+  // If user is already authenticated, hard-redirect them away from the login page.
+  // Using window.location.href (not router.replace) to force a full page reload
+  // which ensures the session cookie is properly read by the server.
   useEffect(() => {
-    if (status === 'authenticated' && !hasRedirected.current) {
+    if (status === 'authenticated' && session?.user && !hasRedirected.current) {
       hasRedirected.current = true
-      const userRole = (session?.user as any)?.role
+      const userRole = (session.user as Record<string, unknown>)?.role as string | undefined
       if (userRole === 'admin' || userRole === 'super_admin') {
         window.location.href = '/admin'
       } else {

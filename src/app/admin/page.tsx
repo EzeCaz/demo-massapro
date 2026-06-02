@@ -10,12 +10,13 @@ export default function AdminPage() {
   const { data: session, status } = useSession()
   const hasRedirected = useRef(false)
 
-  // Handle auth redirects — use hard navigation to avoid client-side routing loops
+  // Handle auth redirects using hard navigation (window.location.href)
+  // to avoid redirect loops where useSession() returns stale data
   useEffect(() => {
     if (status === 'loading' || hasRedirected.current) return
 
     if (status === 'authenticated') {
-      const userRole = (session?.user as any)?.role
+      const userRole = (session?.user as Record<string, unknown>)?.role as string | undefined
       if (userRole !== 'admin' && userRole !== 'super_admin') {
         hasRedirected.current = true
         window.location.href = '/dashboard'

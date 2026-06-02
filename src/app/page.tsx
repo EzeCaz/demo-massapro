@@ -1,42 +1,34 @@
-'use client'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { redirect } from 'next/navigation'
 
-import { useEffect, useRef, useState } from 'react'
-import { useSession } from 'next-auth/react'
-import { Loader2 } from 'lucide-react'
+/**
+ * Root page — server-side redirect based on session role.
+ * Using getServerSession (server component) instead of useSession (client)
+ * to avoid the race condition that causes redirect loops.
+ *
+ * If the database isn't ready yet (tables don't exist), getServerSession
+ * may throw — we catch that and redirect to /login gracefully.
+ */
+export default async function HomePage() {
+  let session = null
 
-export default function HomePage() {
-  const { data: session, status } = useSession()
-  const hasRedirected = useRef(false)
+  try {
+    session = await getServerSession(authOptions)
+  } catch (error) {
+    // Database not ready yet — redirect to login page
+    // The login page will trigger /api/init if needed
+    console.error('[page] getServerSession error:', error)
+    redirect('/login')
+  }
 
-  useEffect(() => {
-    // Don't redirect while session is still loading or if we've already kicked off a redirect
-    if (status === 'loading' || hasRedirected.current) return
-
-    hasRedirected.current = true
-
-    if (status === 'authenticated' && session?.user) {
-      const userRole = (session.user as any)?.role
-      if (userRole === 'admin' || userRole === 'super_admin') {
-        window.location.href = '/admin'
-      } else {
-        window.location.href = '/dashboard'
-      }
-    } else {
-      window.location.href = '/login'
+  if (session?.user) {
+    const userRole = (session.user as Record<string, unknown>)?.role as string | undefined
+    if (userRole === 'admin' || userRole === 'super_admin') {
+      redirect('/admin')
     }
-  }, [status, session])
+    redirect('/dashboard')
+  }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-navy via-[#1E293B] to-[#0F172A]">
-      <div className="text-center">
-        <img
-          src="/massapro-logo.png"
-          alt="MassaPro"
-          className="h-16 w-auto mx-auto mb-4"
-        />
-        <Loader2 className="h-8 w-8 animate-spin text-white mx-auto" />
-        <p className="text-sm text-blue-200 mt-3">Redirecting...</p>
-      </div>
-    </div>
-  )
+  redirect('/login')
 }

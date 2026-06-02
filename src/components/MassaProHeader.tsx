@@ -5,7 +5,7 @@ import { signOut, useSession } from 'next-auth/react'
 import { Globe, LogOut, Shield, LayoutDashboard, Crown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +19,7 @@ export default function MassaProHeader() {
   const { language, setLanguage, t } = useLanguage()
   const { data: session } = useSession()
   const pathname = usePathname()
+  const router = useRouter()
 
   const userRole = (session?.user as any)?.role
   const userName = session?.user?.name || session?.user?.email || ''
@@ -116,7 +117,7 @@ export default function MassaProHeader() {
                 <DropdownMenuItem
                   onClick={async () => {
                     await signOut({ redirect: false })
-                    window.location.href = '/login'
+                    router.replace('/login')
                   }}
                   className="text-destructive focus:text-destructive cursor-pointer"
                 >
