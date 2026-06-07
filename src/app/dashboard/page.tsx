@@ -57,10 +57,10 @@ export default function DashboardPage() {
   const showWizard = scenarios.length === 0 && !showSetup
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="h-screen flex flex-col overflow-hidden bg-background">
       <MassaProHeader />
 
-      <main className="flex-1 max-w-[1536px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 overflow-hidden flex flex-col max-w-[1536px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-4">
         {showWizard ? (
           <SetupWizard
             onComplete={() => setShowSetup(true)}
@@ -71,8 +71,8 @@ export default function DashboardPage() {
       </main>
 
       {/* Footer */}
-      <footer className="mt-auto border-t bg-muted/30">
-        <div className="max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center text-sm text-muted-foreground">
+      <footer className="shrink-0 border-t bg-muted/30">
+        <div className="max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 py-2 text-center text-xs text-muted-foreground">
           &copy; {new Date().getFullYear()} MassaPro. All rights reserved.
         </div>
       </footer>

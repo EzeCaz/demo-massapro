@@ -572,8 +572,11 @@ export default function DemoDashboard() {
   }, [])
 
   useEffect(() => {
-    measureScroll()
-    updateContainerRect()
+    // Use rAF to ensure the DOM has painted with new data before measuring
+    const rafId = requestAnimationFrame(() => {
+      measureScroll()
+      updateContainerRect()
+    })
 
     const resizeObserver = new ResizeObserver(() => {
       measureScroll()
@@ -584,12 +587,11 @@ export default function DemoDashboard() {
     }
 
     window.addEventListener('resize', updateContainerRect)
-    window.addEventListener('scroll', updateContainerRect, true)
 
     return () => {
+      cancelAnimationFrame(rafId)
       resizeObserver.disconnect()
       window.removeEventListener('resize', updateContainerRect)
-      window.removeEventListener('scroll', updateContainerRect, true)
     }
   }, [measureScroll, updateContainerRect, filteredScenarios])
 
@@ -1212,11 +1214,15 @@ export default function DemoDashboard() {
   // so the user never needs to scroll to find it
 
   return (
-    <div className="space-y-4" ref={wrapperRef}>
+    <div className="flex flex-col flex-1 min-h-0 gap-3" ref={wrapperRef}>
       {/* Custom scrollbar styles */}
       <style>{`
-        .mp-hide-scrollbar::-webkit-scrollbar { display: none; }
-        .mp-hide-scrollbar { scrollbar-width: none; }
+        .mp-table-scroll::-webkit-scrollbar { height: 14px; width: 10px; }
+        .mp-table-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.06); border-radius: 7px; }
+        .mp-table-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.22); border-radius: 7px; border: 2px solid transparent; background-clip: content-box; min-height: 40px; }
+        .mp-table-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.40); border: 2px solid transparent; background-clip: content-box; }
+        .mp-table-scroll::-webkit-scrollbar-corner { background: transparent; }
+        .mp-table-scroll { scrollbar-width: auto; scrollbar-color: rgba(0,0,0,0.22) rgba(0,0,0,0.06); }
         .mp-float-scroll::-webkit-scrollbar { height: 14px; width: 10px; }
         .mp-float-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.10); border-radius: 7px; }
         .mp-float-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.28); border-radius: 7px; border: 2px solid transparent; background-clip: content-box; min-height: 40px; }
@@ -1226,7 +1232,7 @@ export default function DemoDashboard() {
       `}</style>
 
       {/* Toolbar: Search, Undo/Redo, Add */}
-      <Card>
+      <Card className="shrink-0">
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative flex-1 min-w-[200px]">
@@ -1339,7 +1345,7 @@ export default function DemoDashboard() {
       </Card>
 
       {/* Scenario count + hints */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between shrink-0">
         <p className="text-sm text-muted-foreground">
           {filteredScenarios.length} of {scenarios.length} {t('dashboard.scenarios')}
           {selectedIds.size > 0 && (
@@ -1359,17 +1365,16 @@ export default function DemoDashboard() {
         </div>
       </div>
 
-      {/* Table with floating scrollbars */}
+      {/* Table - fills remaining viewport height so scrollbar is always visible */}
       {filteredScenarios.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground">{t('general.noData')}</p>
         </div>
       ) : (
-        <div className="relative">
+        <div className="flex-1 min-h-0 flex flex-col">
           <div
             ref={tableContainerRef}
-            className="overflow-auto border rounded-lg mp-hide-scrollbar"
-            style={{ maxHeight: 'calc(100vh - 300px)', paddingBottom: showHScroll ? '32px' : undefined }}
+            className="flex-1 min-h-0 overflow-auto border rounded-lg mp-table-scroll"
           >
             <Table>
               <TableHeader>
@@ -1509,85 +1514,62 @@ export default function DemoDashboard() {
             </Table>
           </div>
 
-          {/* Floating Horizontal Scrollbar - rendered via portal so fixed positioning always works relative to viewport */}
-
-          {/* Floating Vertical Scrollbar */}
-          {showVScroll && (
+          {/* Floating Horizontal Scrollbar - rendered via portal at document.body level */}
+          {showHScroll && typeof window !== 'undefined' && createPortal(
             <div
-              ref={vScrollProxyRef}
-              className="fixed z-50 mp-float-scroll"
+              className="flex items-center mp-float-scroll"
               style={{
-                top: vScrollTop,
-                left: containerRect.left + containerRect.width - 14,
-                height: vScrollVisibleHeight,
-                width: '14px',
-                overflowX: 'hidden',
-                overflowY: 'scroll',
-                backgroundColor: 'rgba(255,255,255,0.92)',
-                backdropFilter: 'blur(6px)',
-                borderLeft: '1px solid rgba(0,0,0,0.08)',
-                borderRadius: '0 6px 6px 0',
+                position: 'fixed',
+                left: 0,
+                bottom: 0,
+                width: '100vw',
+                height: '28px',
+                backgroundColor: 'rgba(255,255,255,0.95)',
+                backdropFilter: 'blur(8px)',
+                borderTop: '1px solid rgba(0,0,0,0.12)',
+                boxShadow: '0 -2px 8px rgba(0,0,0,0.06)',
+                zIndex: 9999,
               }}
             >
-              <div style={{ width: '1px', height: scrollDims.scrollHeight }} />
-            </div>
+              {/* Left arrow button */}
+              <button
+                className="flex items-center justify-center w-8 h-full text-muted-foreground hover:text-foreground hover:bg-black/5 shrink-0 transition-colors cursor-pointer"
+                onClick={() => {
+                  const el = tableContainerRef.current
+                  if (el) el.scrollLeft = Math.max(0, el.scrollLeft - 150)
+                }}
+                title="Scroll left"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M7 1L3 5L7 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              {/* Scrollbar proxy - mirrors table scroll position */}
+              <div
+                ref={hScrollProxyRef}
+                className="mp-float-scroll"
+                style={{
+                  flex: 1,
+                  height: '28px',
+                  overflowX: 'scroll',
+                  overflowY: 'hidden',
+                }}
+              >
+                <div style={{ width: scrollDims.scrollWidth, height: '1px' }} />
+              </div>
+              {/* Right arrow button */}
+              <button
+                className="flex items-center justify-center w-8 h-full text-muted-foreground hover:text-foreground hover:bg-black/5 shrink-0 transition-colors cursor-pointer"
+                onClick={() => {
+                  const el = tableContainerRef.current
+                  if (el) el.scrollLeft = Math.min(el.scrollWidth, el.scrollLeft + 150)
+                }}
+                title="Scroll right"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 1L7 5L3 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>,
+            document.body
           )}
         </div>
-      )}
-      {/* Horizontal scrollbar rendered via portal at document.body level so position:fixed always works relative to viewport */}
-      {showHScroll && typeof window !== 'undefined' && createPortal(
-        <div
-          className="flex items-center mp-hscroll-bar"
-          style={{
-            position: 'fixed',
-            left: 0,
-            bottom: 0,
-            width: '100vw',
-            height: '28px',
-            backgroundColor: 'rgba(255,255,255,0.95)',
-            backdropFilter: 'blur(8px)',
-            borderTop: '1px solid rgba(0,0,0,0.12)',
-            boxShadow: '0 -2px 8px rgba(0,0,0,0.06)',
-            zIndex: 9999,
-          }}
-        >
-          {/* Left arrow button */}
-          <button
-            className="flex items-center justify-center w-8 h-full text-muted-foreground hover:text-foreground hover:bg-black/5 shrink-0 transition-colors cursor-pointer"
-            onClick={() => {
-              const el = tableContainerRef.current
-              if (el) el.scrollLeft = Math.max(0, el.scrollLeft - 150)
-            }}
-            title="Scroll left"
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M7 1L3 5L7 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          {/* Scrollbar proxy */}
-          <div
-            ref={hScrollProxyRef}
-            className="mp-float-scroll"
-            style={{
-              flex: 1,
-              height: '28px',
-              overflowX: 'scroll',
-              overflowY: 'hidden',
-            }}
-          >
-            <div style={{ width: scrollDims.scrollWidth, height: '1px' }} />
-          </div>
-          {/* Right arrow button */}
-          <button
-            className="flex items-center justify-center w-8 h-full text-muted-foreground hover:text-foreground hover:bg-black/5 shrink-0 transition-colors cursor-pointer"
-            onClick={() => {
-              const el = tableContainerRef.current
-              if (el) el.scrollLeft = Math.min(el.scrollWidth, el.scrollLeft + 150)
-            }}
-            title="Scroll right"
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 1L7 5L3 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-        </div>,
-        document.body
       )}
     </div>
   )
