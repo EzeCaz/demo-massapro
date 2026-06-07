@@ -113,6 +113,9 @@ export default function DemoDashboard() {
   const [editingCell, setEditingCell] = useState<{ scenarioId: string; colKey: string } | null>(null)
   const [editValue, setEditValue] = useState('')
   const editInputRef = useRef<HTMLInputElement>(null)
+  // Company-select mode: 'select' (dropdown) or 'input' (type new)
+  const [companyMode, setCompanyMode] = useState<'select' | 'input'>('select')
+  const [newCompanyName, setNewCompanyName] = useState('')
 
   // Undo/Redo stacks
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([])
@@ -290,6 +293,19 @@ export default function DemoDashboard() {
     const val = getEditValue(scenario, apiField)
     setEditingCell({ scenarioId, colKey })
     setEditValue(val)
+    // Initialize company mode
+    if (colKey === 'company') {
+      const existingCompanies = Array.from(new Set(
+        scenarios.map((s: any) => s.client?.company).filter(Boolean) as string[]
+      )).sort()
+      if (existingCompanies.includes(val)) {
+        setCompanyMode('select')
+        setNewCompanyName('')
+      } else {
+        setCompanyMode('input')
+        setNewCompanyName(val)
+      }
+    }
     // Focus the input after render
     setTimeout(() => editInputRef.current?.focus(), 0)
   }
@@ -297,6 +313,8 @@ export default function DemoDashboard() {
   const cancelEditing = () => {
     setEditingCell(null)
     setEditValue('')
+    setCompanyMode('select')
+    setNewCompanyName('')
   }
 
   const saveCell = async (scenarioId: string, colKey: string, value: string, pushToUndo = true) => {
@@ -787,25 +805,48 @@ export default function DemoDashboard() {
         cancelEditing()
       }
 
-      // Company select: dropdown with existing companies + add new
+      // Company select: native <select> dropdown with existing companies + "Add new" option
       if (editType === 'company-select') {
         const existingCompanies = Array.from(new Set(
           scenarios.map((s: any) => s.client?.company).filter(Boolean) as string[]
         )).sort()
 
-        return (
-          <TableCell onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-1">
-              <div className="relative flex-1">
-                <input
-                  list={`company-list-${scenario.id}`}
+        const selectedInDropdown = existingCompanies.includes(editValue) ? editValue : ''
+
+        // When user picks from dropdown
+        const handleSelectChange = (val: string) => {
+          if (val === '__ADD_NEW__') {
+            setCompanyMode('input')
+            setNewCompanyName('')
+            // Focus the text input after render
+            setTimeout(() => editInputRef.current?.focus(), 0)
+          } else {
+            setEditValue(val)
+          }
+        }
+
+        // When user types a new company name
+        const handleNewCompanyConfirm = () => {
+          if (newCompanyName.trim()) {
+            saveCell(scenario.id, colKey, newCompanyName.trim())
+          } else {
+            cancelEditing()
+          }
+        }
+
+        // SELECT MODE: native dropdown
+        if (companyMode === 'select') {
+          return (
+            <TableCell onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-1">
+                <select
                   ref={editInputRef as any}
-                  value={editValue}
-                  onChange={e => setEditValue(e.target.value)}
+                  value={selectedInDropdown}
+                  onChange={e => handleSelectChange(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
                       e.preventDefault()
-                      saveCell(scenario.id, colKey, editValue)
+                      if (editValue) saveCell(scenario.id, colKey, editValue)
                     }
                     if (e.key === 'Escape') cancelEditing()
                     if (e.key === 'Tab') {
@@ -813,19 +854,75 @@ export default function DemoDashboard() {
                       handleTabNav(scenario.id, colKey, e.shiftKey)
                     }
                   }}
-                  className="h-7 text-xs border border-vivid-blue rounded px-2 bg-white focus:outline-none focus:ring-1 focus:ring-vivid-blue w-full"
+                  className="h-7 text-xs border border-vivid-blue rounded px-1 bg-white focus:outline-none focus:ring-1 focus:ring-vivid-blue flex-1 cursor-pointer"
                   autoFocus
-                  placeholder="Select or type new company..."
-                />
-                <datalist id={`company-list-${scenario.id}`}>
+                >
+                  <option value="" disabled>Select a company...</option>
                   {existingCompanies.map(c => (
-                    <option key={c} value={c} />
+                    <option key={c} value={c}>{c}</option>
                   ))}
-                </datalist>
+                  <option value="__ADD_NEW__">+ Add New Company</option>
+                </select>
+                <button
+                  className="flex items-center justify-center h-7 w-7 rounded hover:bg-emerald/10 text-emerald cursor-pointer shrink-0 border border-transparent hover:border-emerald/20 transition-colors"
+                  onMouseDown={handleSave}
+                  title="Save (Enter)"
+                >
+                  <Check className="h-4 w-4" />
+                </button>
+                <button
+                  className="flex items-center justify-center h-7 w-7 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 cursor-pointer shrink-0 border border-transparent hover:border-red-200 transition-colors"
+                  onMouseDown={handleCancel}
+                  title="Cancel (Esc)"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
+            </TableCell>
+          )
+        }
+
+        // INPUT MODE: type a new company name
+        return (
+          <TableCell onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-1">
+              <Input
+                ref={editInputRef}
+                value={newCompanyName}
+                onChange={e => setNewCompanyName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleNewCompanyConfirm()
+                  }
+                  if (e.key === 'Escape') cancelEditing()
+                  if (e.key === 'Tab') {
+                    e.preventDefault()
+                    handleTabNav(scenario.id, colKey, e.shiftKey)
+                  }
+                }}
+                className="h-7 text-xs border-vivid-blue focus:ring-1 focus:ring-vivid-blue flex-1"
+                autoFocus
+                placeholder="Type new company name..."
+              />
+              <button
+                className="flex items-center justify-center h-7 w-7 rounded hover:bg-muted text-muted-foreground cursor-pointer shrink-0 border border-transparent hover:border-muted-foreground/20 transition-colors"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setCompanyMode('select')
+                }}
+                title="Back to list"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+              </button>
               <button
                 className="flex items-center justify-center h-7 w-7 rounded hover:bg-emerald/10 text-emerald cursor-pointer shrink-0 border border-transparent hover:border-emerald/20 transition-colors"
-                onMouseDown={handleSave}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  handleNewCompanyConfirm()
+                }}
                 title="Save (Enter)"
               >
                 <Check className="h-4 w-4" />
