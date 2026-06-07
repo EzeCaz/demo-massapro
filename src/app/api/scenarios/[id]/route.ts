@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { TRANSLATABLE_FIELDS, translateText } from '@/lib/translate'
 
 export async function GET(
   req: NextRequest,
@@ -142,7 +143,69 @@ export async function PUT(
       await db.changeLog.createMany({ data: changeLogs })
     }
 
-    return NextResponse.json(scenario)
+    // Auto-translate: when autoTranslate is true, translate any
+    // translatable fields that have content but missing En/Es translations
+    let translationResults: Record<string, string> | null = null
+    if (body.autoTranslate) {
+      try {
+        const translationUpdates: any = {}
+        translationResults = {}
+
+        // Re-read the updated scenario to get fresh data
+        const freshScenario = await db.scenario.findUnique({ where: { id } })
+        if (freshScenario) {
+          for (const field of TRANSLATABLE_FIELDS) {
+            const baseValue = (freshScenario as any)[field]
+            if (!baseValue || baseValue.trim() === '') continue
+
+            const enValue = (freshScenario as any)[field + 'En']
+            const esValue = (freshScenario as any)[field + 'Es']
+
+            // Translate to English if En is empty
+            if (!enValue) {
+              try {
+                const translated = await translateText(baseValue, 'Spanish', 'English')
+                if (translated) {
+                  translationUpdates[field + 'En'] = translated
+                  translationResults[field + 'En'] = translated
+                }
+              } catch (err) {
+                console.error(`Auto-translate error for ${field}En:`, err)
+              }
+            }
+
+            // Translate to Spanish if Es is empty
+            if (!esValue) {
+              try {
+                const translated = await translateText(baseValue, 'English', 'Spanish')
+                if (translated) {
+                  translationUpdates[field + 'Es'] = translated
+                  translationResults[field + 'Es'] = translated
+                }
+              } catch (err) {
+                console.error(`Auto-translate error for ${field}Es:`, err)
+              }
+            }
+          }
+
+          // Save all translations at once
+          if (Object.keys(translationUpdates).length > 0) {
+            await db.scenario.update({
+              where: { id },
+              data: translationUpdates,
+            })
+          }
+        }
+      } catch (err) {
+        console.error('Auto-translate error:', err)
+        // Don't fail the save if translation fails
+      }
+    }
+
+    return NextResponse.json({
+      ...scenario,
+      ...(translationResults ? { _translations: translationResults } : {}),
+    })
   } catch (error) {
     console.error('Update scenario error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

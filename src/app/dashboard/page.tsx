@@ -18,14 +18,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (status === 'loading' || hasRedirected.current) return
 
-    if (status === 'authenticated') {
-      const userRole = (session?.user as Record<string, unknown>)?.role as string | undefined
-      if (userRole === 'admin' || userRole === 'super_admin') {
-        hasRedirected.current = true
-        window.location.href = '/admin'
-        return
-      }
-    } else if (status === 'unauthenticated') {
+    // All authenticated users (including admins) can access the dashboard
+    if (status === 'unauthenticated') {
       hasRedirected.current = true
       window.location.href = '/login'
     }
@@ -66,7 +60,7 @@ export default function DashboardPage() {
     <div className="min-h-screen flex flex-col bg-background">
       <MassaProHeader />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-[1536px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {showWizard ? (
           <SetupWizard
             onComplete={() => setShowSetup(true)}
@@ -78,7 +72,7 @@ export default function DashboardPage() {
 
       {/* Footer */}
       <footer className="mt-auto border-t bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center text-sm text-muted-foreground">
+        <div className="max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center text-sm text-muted-foreground">
           &copy; {new Date().getFullYear()} MassaPro. All rights reserved.
         </div>
       </footer>

@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { Plus, Trash2, Upload, FileText, X, Loader2, Link } from 'lucide-react'
+import LanguageMultiSelect from './LanguageMultiSelect'
 
 interface ScenarioFormProps {
   scenario: any
@@ -23,6 +24,7 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
   const queryClient = useQueryClient()
   const [formData, setFormData] = useState<Record<string, any>>({})
   const [saving, setSaving] = useState(false)
+  const [translating, setTranslating] = useState(false)
   const [uploading, setUploading] = useState(false)
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -100,14 +102,20 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
   const handleSaveDraft = async () => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     setSaving(true)
+    setTranslating(true)
     try {
       const res = await fetch(`/api/scenarios/${scenario.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, status: 'draft' }),
+        body: JSON.stringify({ ...formData, status: 'draft', autoTranslate: true }),
       })
       if (res.ok) {
-        toast.success(t('dashboard.saved'))
+        const data = await res.json()
+        const translationCount = data._translations ? Object.keys(data._translations).length : 0
+        toast.success(t('dashboard.saved'), {
+          description: translationCount > 0 ? `Translated ${translationCount} field(s) to EN/ES` : undefined,
+          duration: translationCount > 0 ? 4000 : 3000,
+        })
         queryClient.invalidateQueries({ queryKey: ['scenarios'] })
       } else {
         toast.error(t('dashboard.error'))
@@ -116,18 +124,20 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
       toast.error(t('dashboard.error'))
     } finally {
       setSaving(false)
+      setTranslating(false)
     }
   }
 
   const handleSubmit = async () => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     setSaving(true)
+    setTranslating(true)
     try {
-      // Save first
+      // Save first with auto-translate
       await fetch(`/api/scenarios/${scenario.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, autoTranslate: true }),
       })
       // Then submit
       const res = await fetch(`/api/scenarios/${scenario.id}/submit`, {
@@ -135,7 +145,7 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
       })
       if (res.ok) {
         toast.success(t('dashboard.submittedMsg'), {
-          description: '🎉',
+          description: 'Translations generated for EN/ES',
           duration: 4000,
         })
         queryClient.invalidateQueries({ queryKey: ['scenarios'] })
@@ -146,6 +156,7 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
       toast.error(t('dashboard.error'))
     } finally {
       setSaving(false)
+      setTranslating(false)
     }
   }
 
@@ -245,9 +256,14 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
           <Badge variant={isSubmitted ? 'default' : 'secondary'} className={isSubmitted ? 'bg-emerald text-white' : ''}>
             {isSubmitted ? t('dashboard.submitted') : t('dashboard.draft')}
           </Badge>
-          {saving && (
+          {saving && !translating && (
             <span className="text-sm text-muted-foreground flex items-center gap-1">
               <Loader2 className="h-3 w-3 animate-spin" /> Saving...
+            </span>
+          )}
+          {translating && (
+            <span className="text-sm text-vivid-blue flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" /> Translating to EN/ES...
             </span>
           )}
         </div>
@@ -373,18 +389,18 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-sm font-medium">{t('form.languagesVoice')}</Label>
-              <Input
+              <LanguageMultiSelect
                 value={formData.languagesVoice || ''}
-                onChange={e => handleFieldChange('languagesVoice', e.target.value)}
-                placeholder="English, Spanish, Portuguese..."
+                onChange={val => handleFieldChange('languagesVoice', val)}
+                placeholder="Select voice languages..."
               />
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-medium">{t('form.languagesText')}</Label>
-              <Input
+              <LanguageMultiSelect
                 value={formData.languagesText || ''}
-                onChange={e => handleFieldChange('languagesText', e.target.value)}
-                placeholder="English, Spanish, Portuguese..."
+                onChange={val => handleFieldChange('languagesText', val)}
+                placeholder="Select text languages..."
               />
             </div>
           </div>
@@ -528,7 +544,7 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
           className="border-vivid-blue text-vivid-blue hover:bg-vivid-blue hover:text-white"
         >
           {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-          {t('dashboard.saveDraft')}
+          {translating ? 'Translating EN/ES...' : t('dashboard.saveDraft')}
         </Button>
         <Button
           onClick={handleSubmit}
@@ -536,7 +552,7 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
           className="bg-emerald hover:bg-emerald/90 text-white"
         >
           {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-          {t('dashboard.submit')}
+          {translating ? 'Translating EN/ES...' : t('dashboard.submit')}
         </Button>
       </div>
     </div>

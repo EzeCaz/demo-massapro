@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
-import ZAI from 'z-ai-web-dev-sdk'
+import { TRANSLATABLE_FIELDS, translateText } from '@/lib/translate'
 
 export async function POST(
   req: NextRequest,
@@ -16,40 +16,50 @@ export async function POST(
 
     const { id } = await params
     const body = await req.json()
-    const { fields, direction } = body // direction: 'es-to-en' or 'en-to-es'
+    const { fields, direction } = body // direction: 'es-to-en', 'en-to-es', or 'auto'
 
     const scenario = await db.scenario.findUnique({ where: { id } })
     if (!scenario) {
       return NextResponse.json({ error: 'Scenario not found' }, { status: 404 })
     }
 
-    const sdk = await ZAI.create()
     const translations: Record<string, string> = {}
-    const technicalTerms = ['ERP', 'CRM', 'CCaaS', 'CTA', 'CPA', 'KPI', 'AI', 'FAQ', 'URL', 'API', 'SaaS', 'B2B', 'B2C', 'ROI']
+    const errors: string[] = []
 
     for (const field of fields) {
       const sourceText = (scenario as any)[field]
       if (!sourceText || sourceText.trim() === '') continue
 
-      const preserveTerms = technicalTerms.map(t => `${t}`).join(', ')
-      const targetLang = direction === 'es-to-en' ? 'English' : 'Spanish'
-      const sourceLang = direction === 'es-to-en' ? 'Spanish' : 'English'
+      let sourceLang: string
+      let targetLang: string
+
+      if (direction === 'es-to-en') {
+        sourceLang = 'Spanish'
+        targetLang = 'English'
+      } else if (direction === 'en-to-es') {
+        sourceLang = 'English'
+        targetLang = 'Spanish'
+      } else {
+        // Auto: determine based on which translation fields are empty
+        const enValue = (scenario as any)[field + 'En']
+        const esValue = (scenario as any)[field + 'Es']
+        if (!enValue && esValue) {
+          sourceLang = 'Spanish'
+          targetLang = 'English'
+        } else {
+          sourceLang = 'English'
+          targetLang = 'Spanish'
+        }
+      }
 
       try {
-        const prompt = `Translate the following ${sourceLang} text to ${targetLang}. Preserve these technical terms exactly as-is (do NOT translate them): ${preserveTerms}. Only return the translated text, nothing else.\n\nText:\n${sourceText}`
-
-        const result = await sdk.chat.completions.create({
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.3,
-        })
-
-        const translated = result.choices?.[0]?.message?.content || ''
+        const translated = await translateText(sourceText, sourceLang, targetLang)
         if (translated) {
-          translations[field] = translated.trim()
+          translations[field] = translated
         }
-      } catch (err) {
-        console.error(`Translation error for field ${field}:`, err)
-        translations[field] = sourceText
+      } catch (err: any) {
+        console.error(`Translation error for field ${field}:`, err.message)
+        errors.push(`${field}: ${err.message}`)
       }
     }
 
@@ -61,9 +71,19 @@ export async function POST(
         if (enField in scenario) {
           updateData[enField] = value
         }
-      } else {
+      } else if (direction === 'en-to-es') {
         const esField = field + 'Es'
         if (esField in scenario) {
+          updateData[esField] = value
+        }
+      } else {
+        // Auto: save to both En and Es suffixes based on what's empty
+        const enField = field + 'En'
+        const esField = field + 'Es'
+        if (!(scenario as any)[enField] && enField in scenario) {
+          updateData[enField] = value
+        }
+        if (!(scenario as any)[esField] && esField in scenario) {
           updateData[esField] = value
         }
       }
@@ -76,9 +96,24 @@ export async function POST(
       })
     }
 
-    return NextResponse.json({ translations, direction })
-  } catch (error) {
+    // If there were errors and no translations succeeded, return error
+    if (errors.length > 0 && Object.keys(translations).length === 0) {
+      return NextResponse.json({
+        error: 'Translation failed',
+        details: errors,
+      }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      translations,
+      direction,
+      ...(errors.length > 0 ? { warnings: errors } : {}),
+    })
+  } catch (error: any) {
     console.error('Translation error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({
+      error: 'Internal server error',
+      details: error.message,
+    }, { status: 500 })
   }
 }

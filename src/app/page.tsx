@@ -23,10 +23,8 @@ export default async function HomePage() {
   }
 
   if (session?.user) {
-    const userRole = (session.user as Record<string, unknown>)?.role as string | undefined
-    if (userRole === 'admin' || userRole === 'super_admin') {
-      redirect('/admin')
-    }
+    // All authenticated users go to /dashboard
+    // Admins can navigate to /admin from the header
     redirect('/dashboard')
   }
 

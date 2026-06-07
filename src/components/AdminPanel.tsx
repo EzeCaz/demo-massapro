@@ -20,7 +20,7 @@ import { useSession } from 'next-auth/react'
 import {
   ChevronDown, ChevronRight, Pencil, Trash2, Check, X, Plus,
   Users, FileText, Mail, Copy, Loader2, Search, Languages,
-  StickyNote, Download, Eye, Filter, Shield, Crown,
+  StickyNote, Download, Eye, Filter, Shield, Crown, Upload,
 } from 'lucide-react'
 import ScenarioForm from './ScenarioForm'
 import CollaboratorPanel from './CollaboratorPanel'
@@ -28,6 +28,7 @@ import CommentsPanel from './CommentsPanel'
 import ChangeLogPanel from './ChangeLogPanel'
 import AdminNotesPanel from './AdminNotesPanel'
 import TranslationPanel from './TranslationPanel'
+import BulkUpload from './BulkUpload'
 
 export default function AdminPanel() {
   const { t } = useLanguage()
@@ -218,7 +219,7 @@ export default function AdminPanel() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="clients" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="clients" className="text-xs sm:text-sm">
             <Users className="h-4 w-4 mr-1 sm:mr-2" />
             {t('admin.clients')}
@@ -230,6 +231,10 @@ export default function AdminPanel() {
           <TabsTrigger value="invites" className="text-xs sm:text-sm">
             <Mail className="h-4 w-4 mr-1 sm:mr-2" />
             {t('admin.invites')}
+          </TabsTrigger>
+          <TabsTrigger value="upload" className="text-xs sm:text-sm">
+            <Upload className="h-4 w-4 mr-1 sm:mr-2" />
+            {t('upload.title')}
           </TabsTrigger>
           <TabsTrigger value="export" className="text-xs sm:text-sm">
             <Download className="h-4 w-4 mr-1 sm:mr-2" />
@@ -645,6 +650,11 @@ export default function AdminPanel() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* UPLOAD TAB */}
+        <TabsContent value="upload" className="mt-4">
+          <BulkUpload />
         </TabsContent>
 
         {/* EXPORT TAB */}
