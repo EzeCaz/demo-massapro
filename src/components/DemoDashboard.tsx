@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useLanguage } from '@/hooks/useLanguage'
 import { useSession } from 'next-auth/react'
@@ -1508,58 +1509,7 @@ export default function DemoDashboard() {
             </Table>
           </div>
 
-          {/* Floating Horizontal Scrollbar - ALWAYS visible at viewport bottom */}
-          {showHScroll && (
-            <div
-              className="fixed z-50 flex items-center"
-              style={{
-                left: 0,
-                bottom: 0,
-                width: '100vw',
-                height: '28px',
-                backgroundColor: 'rgba(255,255,255,0.95)',
-                backdropFilter: 'blur(8px)',
-                borderTop: '1px solid rgba(0,0,0,0.12)',
-                boxShadow: '0 -2px 8px rgba(0,0,0,0.06)',
-              }}
-            >
-              {/* Left arrow button */}
-              <button
-                className="flex items-center justify-center w-8 h-full text-muted-foreground hover:text-foreground hover:bg-black/5 shrink-0 transition-colors cursor-pointer"
-                onClick={() => {
-                  const el = tableContainerRef.current
-                  if (el) el.scrollLeft = Math.max(0, el.scrollLeft - 150)
-                }}
-                title="Scroll left"
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M7 1L3 5L7 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
-              {/* Scrollbar proxy */}
-              <div
-                ref={hScrollProxyRef}
-                className="mp-float-scroll"
-                style={{
-                  flex: 1,
-                  height: '28px',
-                  overflowX: 'scroll',
-                  overflowY: 'hidden',
-                }}
-              >
-                <div style={{ width: scrollDims.scrollWidth, height: '1px' }} />
-              </div>
-              {/* Right arrow button */}
-              <button
-                className="flex items-center justify-center w-8 h-full text-muted-foreground hover:text-foreground hover:bg-black/5 shrink-0 transition-colors cursor-pointer"
-                onClick={() => {
-                  const el = tableContainerRef.current
-                  if (el) el.scrollLeft = Math.min(el.scrollWidth, el.scrollLeft + 150)
-                }}
-                title="Scroll right"
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 1L7 5L3 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
-            </div>
-          )}
+          {/* Floating Horizontal Scrollbar - rendered via portal so fixed positioning always works relative to viewport */}
 
           {/* Floating Vertical Scrollbar */}
           {showVScroll && (
@@ -1583,6 +1533,61 @@ export default function DemoDashboard() {
             </div>
           )}
         </div>
+      )}
+      {/* Horizontal scrollbar rendered via portal at document.body level so position:fixed always works relative to viewport */}
+      {showHScroll && typeof window !== 'undefined' && createPortal(
+        <div
+          className="flex items-center mp-hscroll-bar"
+          style={{
+            position: 'fixed',
+            left: 0,
+            bottom: 0,
+            width: '100vw',
+            height: '28px',
+            backgroundColor: 'rgba(255,255,255,0.95)',
+            backdropFilter: 'blur(8px)',
+            borderTop: '1px solid rgba(0,0,0,0.12)',
+            boxShadow: '0 -2px 8px rgba(0,0,0,0.06)',
+            zIndex: 9999,
+          }}
+        >
+          {/* Left arrow button */}
+          <button
+            className="flex items-center justify-center w-8 h-full text-muted-foreground hover:text-foreground hover:bg-black/5 shrink-0 transition-colors cursor-pointer"
+            onClick={() => {
+              const el = tableContainerRef.current
+              if (el) el.scrollLeft = Math.max(0, el.scrollLeft - 150)
+            }}
+            title="Scroll left"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M7 1L3 5L7 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          {/* Scrollbar proxy */}
+          <div
+            ref={hScrollProxyRef}
+            className="mp-float-scroll"
+            style={{
+              flex: 1,
+              height: '28px',
+              overflowX: 'scroll',
+              overflowY: 'hidden',
+            }}
+          >
+            <div style={{ width: scrollDims.scrollWidth, height: '1px' }} />
+          </div>
+          {/* Right arrow button */}
+          <button
+            className="flex items-center justify-center w-8 h-full text-muted-foreground hover:text-foreground hover:bg-black/5 shrink-0 transition-colors cursor-pointer"
+            onClick={() => {
+              const el = tableContainerRef.current
+              if (el) el.scrollLeft = Math.min(el.scrollWidth, el.scrollLeft + 150)
+            }}
+            title="Scroll right"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 1L7 5L3 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+        </div>,
+        document.body
       )}
     </div>
   )
