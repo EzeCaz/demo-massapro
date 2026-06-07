@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useLanguage } from '@/hooks/useLanguage'
 import { useSession } from 'next-auth/react'
@@ -126,19 +125,8 @@ export default function DemoDashboard() {
   // Saving cells tracking
   const [savingCells, setSavingCells] = useState<Set<string>>(new Set()) // "scenarioId:colKey"
 
-  // Floating scrollbar refs & state
+  // Table container ref for keyboard scrolling
   const tableContainerRef = useRef<HTMLDivElement>(null)
-  const hScrollProxyRef = useRef<HTMLDivElement>(null)
-  const vScrollProxyRef = useRef<HTMLDivElement>(null)
-  const wrapperRef = useRef<HTMLDivElement>(null)
-  const [showHScroll, setShowHScroll] = useState(false)
-  const [showVScroll, setShowVScroll] = useState(false)
-  const [scrollDims, setScrollDims] = useState({ scrollWidth: 0, scrollHeight: 0, clientWidth: 0, clientHeight: 0 })
-  const [containerRect, setContainerRect] = useState({ left: 0, top: 0, width: 0, bottom: 0 })
-  const [mounted, setMounted] = useState(false)
-
-  // Ensure portal can render (client-only)
-  useEffect(() => { setMounted(true) }, [])
 
   // Fetch scenarios
   const { data: scenarios = [], isLoading } = useQuery({
@@ -546,103 +534,7 @@ export default function DemoDashboard() {
     setActiveScenarioId(null)
   }
 
-  // ============ FLOATING SCROLLBAR LOGIC ============
-
-  const measureScroll = useCallback(() => {
-    const el = tableContainerRef.current
-    if (!el) return
-    // Force layout recalculation
-    const scrollWidth = el.scrollWidth
-    const clientWidth = el.clientWidth
-    const scrollHeight = el.scrollHeight
-    const clientHeight = el.clientHeight
-    const needsH = scrollWidth > clientWidth + 2
-    const needsV = scrollHeight > clientHeight + 2
-    setShowHScroll(needsH)
-    setShowVScroll(needsV)
-    setScrollDims({ scrollWidth, scrollHeight, clientWidth, clientHeight })
-  }, [])
-
-  const updateContainerRect = useCallback(() => {
-    const el = tableContainerRef.current
-    if (!el) return
-    const rect = el.getBoundingClientRect()
-    setContainerRect({
-      left: rect.left,
-      top: rect.top,
-      width: rect.width,
-      bottom: rect.bottom,
-    })
-  }, [])
-
-  useEffect(() => {
-    // Double rAF to ensure DOM is fully painted and laid out before measuring
-    const raf1 = requestAnimationFrame(() => {
-      const raf2 = requestAnimationFrame(() => {
-        measureScroll()
-        updateContainerRect()
-      })
-      // Store raf2 for cleanup
-      return raf2
-    })
-
-    const resizeObserver = new ResizeObserver(() => {
-      measureScroll()
-      updateContainerRect()
-    })
-    if (tableContainerRef.current) {
-      resizeObserver.observe(tableContainerRef.current)
-    }
-
-    window.addEventListener('resize', updateContainerRect)
-
-    // Also re-measure after a short delay to catch late-rendering content
-    const timeoutId = setTimeout(() => {
-      measureScroll()
-      updateContainerRect()
-    }, 500)
-
-    return () => {
-      cancelAnimationFrame(raf1)
-      clearTimeout(timeoutId)
-      resizeObserver.disconnect()
-      window.removeEventListener('resize', updateContainerRect)
-    }
-  }, [measureScroll, updateContainerRect, filteredScenarios])
-
-  useEffect(() => {
-    const table = tableContainerRef.current
-    const proxy = hScrollProxyRef.current
-    if (!table || !proxy || !showHScroll) return
-
-    let syncing = false
-    const syncFromTable = () => { if (syncing) return; syncing = true; proxy.scrollLeft = table.scrollLeft; syncing = false }
-    const syncFromProxy = () => { if (syncing) return; syncing = true; table.scrollLeft = proxy.scrollLeft; syncing = false }
-
-    table.addEventListener('scroll', syncFromTable)
-    proxy.addEventListener('scroll', syncFromProxy)
-    return () => {
-      table.removeEventListener('scroll', syncFromTable)
-      proxy.removeEventListener('scroll', syncFromProxy)
-    }
-  }, [showHScroll])
-
-  useEffect(() => {
-    const table = tableContainerRef.current
-    const proxy = vScrollProxyRef.current
-    if (!table || !proxy || !showVScroll) return
-
-    let syncing = false
-    const syncFromTable = () => { if (syncing) return; syncing = true; proxy.scrollTop = table.scrollTop; syncing = false }
-    const syncFromProxy = () => { if (syncing) return; syncing = true; table.scrollTop = proxy.scrollTop; syncing = false }
-
-    table.addEventListener('scroll', syncFromTable)
-    proxy.addEventListener('scroll', syncFromProxy)
-    return () => {
-      table.removeEventListener('scroll', syncFromTable)
-      proxy.removeEventListener('scroll', syncFromProxy)
-    }
-  }, [showVScroll])
+  // ============ KEYBOARD SCROLL ============
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -651,16 +543,13 @@ export default function DemoDashboard() {
 
       const el = tableContainerRef.current
       if (!el) return
-      if (!showHScroll && !showVScroll) return
 
       const step = 60
       let handled = false
 
       switch (e.key) {
-        case 'ArrowLeft': if (showHScroll) { el.scrollLeft -= step; handled = true } break
-        case 'ArrowRight': if (showHScroll) { el.scrollLeft += step; handled = true } break
-        case 'ArrowUp': if (showVScroll) { el.scrollTop -= step; handled = true } break
-        case 'ArrowDown': if (showVScroll) { el.scrollTop += step; handled = true } break
+        case 'ArrowUp': el.scrollTop -= step; handled = true; break
+        case 'ArrowDown': el.scrollTop += step; handled = true; break
       }
 
       if (handled) e.preventDefault()
@@ -668,9 +557,7 @@ export default function DemoDashboard() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showHScroll, showVScroll])
-
-  // ============ END FLOATING SCROLLBAR LOGIC ============
+  }, [])
 
   // Column Header component with filter + sort
   const FilterableHeader = ({ colKey, sortFieldKey, label, className }: {
@@ -1220,26 +1107,12 @@ export default function DemoDashboard() {
   // TABLE VIEW (default)
   // =====================
 
-  const vScrollVisibleHeight = Math.min(
-    scrollDims.clientHeight,
-    window.innerHeight - Math.max(containerRect.top, 0)
-  )
-  const vScrollTop = Math.max(containerRect.top, 0)
-  // Horizontal scrollbar is always at the absolute bottom of the viewport
-  // so the user never needs to scroll to find it
-
   return (
-    <div className="space-y-3" ref={wrapperRef}>
-      {/* Custom scrollbar styles */}
+    <div className="space-y-3">
+      {/* Table styles - fixed layout so columns fit viewport */}
       <style>{`
-        .mp-hide-scrollbar::-webkit-scrollbar { display: none; }
-        .mp-hide-scrollbar { scrollbar-width: none; }
-        .mp-float-scroll::-webkit-scrollbar { height: 14px; width: 10px; }
-        .mp-float-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.10); border-radius: 7px; }
-        .mp-float-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.30); border-radius: 7px; border: 2px solid transparent; background-clip: content-box; min-height: 40px; }
-        .mp-float-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.50); border: 2px solid transparent; background-clip: content-box; }
-        .mp-float-scroll::-webkit-scrollbar-corner { background: transparent; }
-        .mp-float-scroll { scrollbar-width: auto; scrollbar-color: rgba(0,0,0,0.30) rgba(0,0,0,0.10); }
+        .mp-fit-table { table-layout: fixed; width: 100%; }
+        .mp-fit-table td, .mp-fit-table th { overflow: hidden; word-wrap: break-word; overflow-wrap: break-word; }
       `}</style>
 
       {/* Toolbar: Search, Undo/Redo, Add */}
@@ -1365,33 +1238,26 @@ export default function DemoDashboard() {
         </p>
         <div className="flex items-center gap-3">
           <p className="text-xs text-muted-foreground">
-            Double-click to edit · <kbd className="px-1 py-0.5 bg-muted rounded text-[10px] border">Tab</kbd> next field · <kbd className="px-1 py-0.5 bg-muted rounded text-[10px] border">Enter</kbd> save
+            Click to edit · <kbd className="px-1 py-0.5 bg-muted rounded text-[10px] border">Tab</kbd> next field · <kbd className="px-1 py-0.5 bg-muted rounded text-[10px] border">Enter</kbd> save
           </p>
-          {(showHScroll || showVScroll) && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <kbd className="px-1 py-0.5 bg-muted rounded text-[10px] border">←→↑↓</kbd>
-              scroll
-            </p>
-          )}
         </div>
       </div>
 
-      {/* Table with floating scrollbar */}
+      {/* Table - all columns fit within viewport, no horizontal scroll */}
       {filteredScenarios.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground">{t('general.noData')}</p>
         </div>
       ) : (
-        <div className="relative">
-          <div
-            ref={tableContainerRef}
-            className="overflow-auto border rounded-lg mp-hide-scrollbar"
-            style={{ maxHeight: 'calc(100vh - 280px)' }}
-          >
-            <Table>
+        <div
+          ref={tableContainerRef}
+          className="overflow-y-auto overflow-x-hidden border rounded-lg"
+          style={{ maxHeight: 'calc(100vh - 260px)' }}
+        >
+            <Table className="mp-fit-table">
               <TableHeader>
                 <TableRow className="bg-muted/50 sticky top-0 z-10">
-                  <TableHead className="w-[44px] px-2">
+                  <TableHead className="w-[36px] px-1">
                     <Checkbox
                       checked={allFilteredSelected ? true : someFilteredSelected ? 'indeterminate' : false}
                       onCheckedChange={toggleSelectAll}
@@ -1399,14 +1265,14 @@ export default function DemoDashboard() {
                     />
                   </TableHead>
 
-                  <FilterableHeader colKey="name" sortFieldKey="name" label={t('dashboard.colName')} className="min-w-[180px]" />
-                  <FilterableHeader colKey="status" sortFieldKey="status" label={t('dashboard.colStatus')} className="min-w-[100px]" />
-                  <FilterableHeader colKey="company" sortFieldKey="company" label={t('dashboard.colCompany')} className="min-w-[160px]" />
-                  <FilterableHeader colKey="website" sortFieldKey="website" label={t('dashboard.colWebsite')} className="min-w-[180px]" />
-                  <FilterableHeader colKey="overview" sortFieldKey="overview" label={t('dashboard.colOverview')} className="min-w-[220px]" />
-                  <FilterableHeader colKey="updatedAt" sortFieldKey="updatedAt" label={t('dashboard.colUpdated')} className="min-w-[120px]" />
-                  <FilterableHeader colKey="createdAt" sortFieldKey="createdAt" label={t('dashboard.colCreated')} className="min-w-[120px]" />
-                  <TableHead className="text-right min-w-[130px]">{t('dashboard.colActions')}</TableHead>
+                  <FilterableHeader colKey="name" sortFieldKey="name" label={t('dashboard.colName')} className="w-[20%]" />
+                  <FilterableHeader colKey="status" sortFieldKey="status" label={t('dashboard.colStatus')} className="w-[8%]" />
+                  <FilterableHeader colKey="company" sortFieldKey="company" label={t('dashboard.colCompany')} className="w-[16%]" />
+                  <FilterableHeader colKey="website" sortFieldKey="website" label={t('dashboard.colWebsite')} className="w-[16%]" />
+                  <FilterableHeader colKey="overview" sortFieldKey="overview" label={t('dashboard.colOverview')} className="w-[22%]" />
+                  <FilterableHeader colKey="updatedAt" sortFieldKey="updatedAt" label={t('dashboard.colUpdated')} className="w-[8%]" />
+                  <FilterableHeader colKey="createdAt" sortFieldKey="createdAt" label={t('dashboard.colCreated')} className="w-[8%]" />
+                  <TableHead className="text-right w-[6%]">{t('dashboard.colActions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1435,7 +1301,7 @@ export default function DemoDashboard() {
 
                       {/* Name - editable */}
                       <EditableCell scenario={scenario} colKey="name">
-                        <span className="font-medium text-sm">{scenario.name}</span>
+                        <span className="font-medium text-sm break-words">{scenario.name}</span>
                       </EditableCell>
 
                       {/* Status - editable (select) */}
@@ -1450,21 +1316,21 @@ export default function DemoDashboard() {
 
                       {/* Company - editable (company select with existing + add new) */}
                       <EditableCell scenario={scenario} colKey="company">
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-sm text-muted-foreground break-words">
                           {scenario.client?.company || scenario.client?.name || '—'}
                         </span>
                       </EditableCell>
 
                       {/* Website - editable */}
                       <EditableCell scenario={scenario} colKey="website">
-                        <span className="text-xs text-muted-foreground truncate max-w-[160px] inline-block">
+                        <span className="text-xs text-muted-foreground break-all">
                           {scenario.companyWebsiteUrl ? scenario.companyWebsiteUrl.replace(/^https?:\/\//, '') : '—'}
                         </span>
                       </EditableCell>
 
                       {/* Overview - editable */}
                       <EditableCell scenario={scenario} colKey="overview">
-                        <span className="text-xs text-muted-foreground line-clamp-2 max-w-[200px]">
+                        <span className="text-xs text-muted-foreground break-words">
                           {scenario.overview || '—'}
                         </span>
                       </EditableCell>
@@ -1525,66 +1391,6 @@ export default function DemoDashboard() {
               </TableBody>
             </Table>
           </div>
-
-          {/* Floating Horizontal Scrollbar - ALWAYS at viewport bottom via portal */}
-        </div>
-      )}
-
-      {/* Floating horizontal scrollbar — rendered at document.body via portal so position:fixed is always relative to viewport */}
-      {mounted && filteredScenarios.length > 0 && createPortal(
-        <div
-          className="flex items-center mp-float-scroll"
-          style={{
-            position: 'fixed',
-            left: 0,
-            bottom: 0,
-            width: '100vw',
-            height: '32px',
-            backgroundColor: 'rgba(255,255,255,0.96)',
-            backdropFilter: 'blur(10px)',
-            borderTop: '1px solid rgba(0,0,0,0.12)',
-            boxShadow: '0 -2px 10px rgba(0,0,0,0.08)',
-            zIndex: 9999,
-            display: showHScroll ? 'flex' : 'none',
-          }}
-        >
-          {/* Left arrow */}
-          <button
-            className="flex items-center justify-center w-10 h-full text-muted-foreground hover:text-foreground hover:bg-black/5 shrink-0 transition-colors cursor-pointer"
-            onClick={() => {
-              const el = tableContainerRef.current
-              if (el) el.scrollLeft = Math.max(0, el.scrollLeft - 200)
-            }}
-            title="Scroll left"
-          >
-            <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M7 1L3 5L7 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          {/* Scroll proxy — syncs with table scrollLeft */}
-          <div
-            ref={hScrollProxyRef}
-            className="mp-float-scroll"
-            style={{
-              flex: 1,
-              height: '32px',
-              overflowX: 'scroll',
-              overflowY: 'hidden',
-            }}
-          >
-            <div style={{ width: scrollDims.scrollWidth || '100%', height: '1px' }} />
-          </div>
-          {/* Right arrow */}
-          <button
-            className="flex items-center justify-center w-10 h-full text-muted-foreground hover:text-foreground hover:bg-black/5 shrink-0 transition-colors cursor-pointer"
-            onClick={() => {
-              const el = tableContainerRef.current
-              if (el) el.scrollLeft = Math.min(el.scrollWidth, el.scrollLeft + 200)
-            }}
-            title="Scroll right"
-          >
-            <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M3 1L7 5L3 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-        </div>,
-        document.body
       )}
     </div>
   )
