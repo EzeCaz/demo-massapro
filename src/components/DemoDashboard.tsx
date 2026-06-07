@@ -1216,12 +1216,12 @@ export default function DemoDashboard() {
       <style>{`
         .mp-hide-scrollbar::-webkit-scrollbar { display: none; }
         .mp-hide-scrollbar { scrollbar-width: none; }
-        .mp-float-scroll::-webkit-scrollbar { height: 10px; width: 10px; }
-        .mp-float-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.06); border-radius: 5px; }
-        .mp-float-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.18); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
-        .mp-float-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.32); border: 2px solid transparent; background-clip: content-box; }
+        .mp-float-scroll::-webkit-scrollbar { height: 14px; width: 10px; }
+        .mp-float-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.10); border-radius: 7px; }
+        .mp-float-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.28); border-radius: 7px; border: 2px solid transparent; background-clip: content-box; min-height: 40px; }
+        .mp-float-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.45); border: 2px solid transparent; background-clip: content-box; }
         .mp-float-scroll::-webkit-scrollbar-corner { background: transparent; }
-        .mp-float-scroll { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.18) rgba(0,0,0,0.06); }
+        .mp-float-scroll { scrollbar-width: auto; scrollbar-color: rgba(0,0,0,0.28) rgba(0,0,0,0.10); }
       `}</style>
 
       {/* Toolbar: Search, Undo/Redo, Add */}
@@ -1368,7 +1368,7 @@ export default function DemoDashboard() {
           <div
             ref={tableContainerRef}
             className="overflow-auto border rounded-lg mp-hide-scrollbar"
-            style={{ maxHeight: 'calc(100vh - 300px)' }}
+            style={{ maxHeight: 'calc(100vh - 300px)', paddingBottom: showHScroll ? '32px' : undefined }}
           >
             <Table>
               <TableHeader>
@@ -1508,25 +1508,56 @@ export default function DemoDashboard() {
             </Table>
           </div>
 
-          {/* Floating Horizontal Scrollbar */}
+          {/* Floating Horizontal Scrollbar - ALWAYS visible at viewport bottom */}
           {showHScroll && (
             <div
-              ref={hScrollProxyRef}
-              className="fixed z-50 mp-float-scroll"
+              className="fixed z-50 flex items-center"
               style={{
-                left: containerRect.left,
+                left: 0,
                 bottom: 0,
-                width: containerRect.width,
-                height: '14px',
-                overflowX: 'scroll',
-                overflowY: 'hidden',
-                backgroundColor: 'rgba(255,255,255,0.92)',
-                backdropFilter: 'blur(6px)',
-                borderTop: '1px solid rgba(0,0,0,0.08)',
-                borderRadius: '0 0 6px 6px',
+                width: '100vw',
+                height: '28px',
+                backgroundColor: 'rgba(255,255,255,0.95)',
+                backdropFilter: 'blur(8px)',
+                borderTop: '1px solid rgba(0,0,0,0.12)',
+                boxShadow: '0 -2px 8px rgba(0,0,0,0.06)',
               }}
             >
-              <div style={{ width: scrollDims.scrollWidth, height: '1px' }} />
+              {/* Left arrow button */}
+              <button
+                className="flex items-center justify-center w-8 h-full text-muted-foreground hover:text-foreground hover:bg-black/5 shrink-0 transition-colors cursor-pointer"
+                onClick={() => {
+                  const el = tableContainerRef.current
+                  if (el) el.scrollLeft = Math.max(0, el.scrollLeft - 150)
+                }}
+                title="Scroll left"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M7 1L3 5L7 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              {/* Scrollbar proxy */}
+              <div
+                ref={hScrollProxyRef}
+                className="mp-float-scroll"
+                style={{
+                  flex: 1,
+                  height: '28px',
+                  overflowX: 'scroll',
+                  overflowY: 'hidden',
+                }}
+              >
+                <div style={{ width: scrollDims.scrollWidth, height: '1px' }} />
+              </div>
+              {/* Right arrow button */}
+              <button
+                className="flex items-center justify-center w-8 h-full text-muted-foreground hover:text-foreground hover:bg-black/5 shrink-0 transition-colors cursor-pointer"
+                onClick={() => {
+                  const el = tableContainerRef.current
+                  if (el) el.scrollLeft = Math.min(el.scrollWidth, el.scrollLeft + 150)
+                }}
+                title="Scroll right"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 1L7 5L3 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
             </div>
           )}
 
