@@ -18,18 +18,6 @@ function containsRTL(text: string): boolean {
   return /[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F]/.test(text)
 }
 
-// Reverse Hebrew/RTL text lines for correct visual display in LTR PDF
-// PDFKit doesn't natively handle RTL, so we reverse the character order
-function reverseRTLText(text: string): string {
-  return text.split('\n').map(line => {
-    if (/[\u0590-\u05FF\u0600-\u06FF]/.test(line)) {
-      // Reverse the line character by character for visual RTL display
-      return line.split('').reverse().join('')
-    }
-    return line
-  }).join('\n')
-}
-
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -73,6 +61,15 @@ export async function GET(
       year: 'numeric', month: 'long', day: 'numeric',
     }) : 'N/A'
 
+    // Check if the scenario has any Hebrew/RTL content
+    const allContent = [
+      scenario.name, scenario.company, scenario.overview, scenario.companyGoals,
+      scenario.aiAutomationsRequired, scenario.demoFocusAreas, scenario.scriptsFlows,
+      scenario.knowledgeBaseText, scenario.faqObjectionHandling, scenario.requiredIntegrations,
+      scenario.erpCrmCcaas,
+    ].filter(Boolean).join(' ')
+    const hasHebrew = containsHebrew(allContent)
+
     const doc = new PDFDocument({
       size: 'A4',
       margins: { top: 50, bottom: 50, left: 50, right: 50 },
@@ -89,7 +86,7 @@ export async function GET(
       doc.registerFont('DejaVuSans', path.join(fontsDir, 'DejaVuSans.ttf'))
       doc.registerFont('DejaVuSans-Bold', path.join(fontsDir, 'DejaVuSans-Bold.ttf'))
     } catch (err) {
-      console.error('[PDF] Font registration failed, falling back to built-in fonts:', err)
+      console.error('[PDF] Font registration failed:', err)
     }
 
     const purple = '#7C3AED'
@@ -97,49 +94,39 @@ export async function GET(
     const bodyGray = '#374151'
     const lightGray = '#9CA3AF'
 
-    // Choose the best font for the given text
+    // Choose font based on whether text contains Hebrew/RTL
     const getBodyFont = (text: string): string => {
-      if (containsHebrew(text) || containsRTL(text)) {
-        return 'DejaVuSans'
-      }
-      return 'Helvetica'
+      return (text && containsRTL(text)) ? 'DejaVuSans' : 'Helvetica'
     }
 
     const getBoldFont = (text: string): string => {
-      if (containsHebrew(text) || containsRTL(text)) {
-        return 'DejaVuSans-Bold'
-      }
-      return 'Helvetica-Bold'
-    }
-
-    // Process text for RTL content
-    const processText = (text: string): string => {
-      if (containsRTL(text)) {
-        return reverseRTLText(text)
-      }
-      return text
+      return (text && containsRTL(text)) ? 'DejaVuSans-Bold' : 'Helvetica-Bold'
     }
 
     // Helper: draw a section
+    // - Section NUMBER and TITLE are always LTR, left-aligned
+    // - Body CONTENT is right-aligned if Hebrew, left-aligned otherwise
     const drawSection = (number: number, title: string, content: string | null | undefined) => {
       if (!content || content.trim() === '') return
 
-      // Check if we need a new page (if less than 80pt remaining)
+      // Check if we need a new page
       if (doc.y > 720) {
         doc.addPage()
       }
 
-      const isHebrew = containsHebrew(content) || containsRTL(content)
-      const boldFont = isHebrew ? 'DejaVuSans-Bold' : 'Helvetica-Bold'
-      const bodyFont = isHebrew ? 'DejaVuSans' : 'Helvetica'
-      const displayContent = isHebrew ? reverseRTLText(content) : content
-      const align = isHebrew ? 'right' as const : 'left' as const
+      const isRTL = containsRTL(content)
 
-      doc.font(boldFont).fontSize(12).fillColor(darkGray)
-      doc.text(`${number}. ${title}`, { continued: false, align })
+      // Section title: always LTR, left-aligned
+      doc.font('Helvetica-Bold').fontSize(12).fillColor(darkGray)
+      doc.text(`${number}. ${title}`, { continued: false, align: 'left' })
       doc.moveDown(0.3)
+
+      // Body content: right-aligned if Hebrew/RTL, left-aligned otherwise
+      const bodyFont = isRTL ? 'DejaVuSans' : 'Helvetica'
+      const contentAlign = isRTL ? 'right' as const : 'left' as const
+
       doc.font(bodyFont).fontSize(10).fillColor(bodyGray)
-      doc.text(displayContent, { lineGap: 3, align })
+      doc.text(content, { lineGap: 3, align: contentAlign })
       doc.moveDown(0.8)
     }
 
@@ -147,41 +134,38 @@ export async function GET(
     // Purple banner
     doc.rect(0, 0, 595.28, 80).fill(purple)
 
-    // Title text
+    // Title text - always LTR
     doc.font('Helvetica-Bold').fontSize(24).fillColor('#FFFFFF')
-    doc.text('MassaPro Demo Form', 50, 25, { width: 495.28 })
+    doc.text('MassaPro Demo Form', 50, 25, { width: 495.28, align: 'left' })
 
-    // Subtitle - use DejaVu if scenario name contains Hebrew
-    const nameIsHebrew = containsHebrew(scenario.name) || containsRTL(scenario.name)
-    if (nameIsHebrew) {
-      doc.font('DejaVuSans').fontSize(10).fillColor('#E9D5FF')
-      doc.text(reverseRTLText(scenario.name), 50, 58, { width: 495.28, align: 'right' })
-    } else {
-      doc.font('Helvetica').fontSize(10).fillColor('#E9D5FF')
-      doc.text(scenario.name, 50, 58, { width: 495.28 })
-    }
+    // Subtitle - scenario name, use DejaVu if Hebrew
+    const nameIsHebrew = containsRTL(scenario.name)
+    const subtitleFont = nameIsHebrew ? 'DejaVuSans' : 'Helvetica'
+    const subtitleAlign = nameIsHebrew ? 'right' as const : 'left' as const
+    doc.font(subtitleFont).fontSize(10).fillColor('#E9D5FF')
+    doc.text(scenario.name, 50, 58, { width: 495.28, align: subtitleAlign })
 
     doc.y = 100
 
     // ===== CUSTOMER INFO =====
-    // Company name might contain Hebrew
-    const companyIsHebrew = containsHebrew(companyName) || containsRTL(companyName)
+    // Label is always LTR, value aligns based on content
+    const companyIsHebrew = containsRTL(companyName)
     if (companyIsHebrew) {
-      doc.font('DejaVuSans-Bold').fontSize(11).fillColor(darkGray)
-      doc.text('Customer Name: ', { continued: true })
-      doc.font('DejaVuSans').fillColor(bodyGray)
-      doc.text(reverseRTLText(companyName))
+      doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
+      doc.text('Customer Name: ', { continued: false, align: 'left' })
+      doc.font('DejaVuSans').fontSize(11).fillColor(bodyGray)
+      doc.text(companyName, { align: 'right' })
     } else {
       doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
-      doc.text('Customer Name: ', { continued: true })
+      doc.text('Customer Name: ', { continued: true, align: 'left' })
       doc.font('Helvetica').fillColor(bodyGray)
-      doc.text(companyName)
+      doc.text(companyName, { align: 'left' })
     }
 
     doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
-    doc.text('Proposed Date: ', { continued: true })
+    doc.text('Proposed Date: ', { continued: true, align: 'left' })
     doc.font('Helvetica').fillColor(bodyGray)
-    doc.text(proposedDate)
+    doc.text(proposedDate, { align: 'left' })
 
     doc.moveDown(1)
 
@@ -214,22 +198,19 @@ export async function GET(
     if (scenario.kpis && scenario.kpis.length > 0) {
       if (doc.y > 680) doc.addPage()
       doc.font('Helvetica-Bold').fontSize(12).fillColor(darkGray)
-      doc.text('KPIs', { continued: false })
+      doc.text('KPIs', { continued: false, align: 'left' })
       doc.moveDown(0.3)
       scenario.kpis.forEach((kpi: any) => {
-        const kpiIsHebrew = containsHebrew(kpi.name) || containsRTL(kpi.name)
+        const kpiIsHebrew = containsRTL(kpi.name)
         const boldFont = kpiIsHebrew ? 'DejaVuSans-Bold' : 'Helvetica-Bold'
         const bodyFont = kpiIsHebrew ? 'DejaVuSans' : 'Helvetica'
-        const kpiName = kpiIsHebrew ? reverseRTLText(kpi.name) : kpi.name
-        const kpiTarget = kpi.targetValue
-          ? (containsHebrew(kpi.targetValue) ? reverseRTLText(kpi.targetValue) : kpi.targetValue)
-          : null
+        const kpiAlign = kpiIsHebrew ? 'right' as const : 'left' as const
 
         doc.font(boldFont).fontSize(10).fillColor(bodyGray)
-        doc.text(`• ${kpiName}`, { continued: !!kpiTarget })
-        if (kpiTarget) {
+        doc.text(`• ${kpi.name}`, { continued: !!kpi.targetValue, align: kpiAlign })
+        if (kpi.targetValue) {
           doc.font(bodyFont).fillColor(lightGray)
-          doc.text(` — Target: ${kpiTarget}`)
+          doc.text(` — Target: ${kpi.targetValue}`, { align: kpiAlign })
         } else {
           doc.text('')
         }
@@ -237,7 +218,7 @@ export async function GET(
       doc.moveDown(0.8)
     }
 
-    // Footer
+    // Footer - always LTR
     if (doc.y > 750) doc.addPage()
     doc.moveTo(50, doc.y + 10).lineTo(545.28, doc.y + 10).strokeColor(lightGray).lineWidth(0.5).stroke()
     doc.moveDown(1)
