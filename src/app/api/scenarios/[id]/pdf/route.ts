@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 import path from 'path'
+import fs from 'fs'
 import PDFDocument from 'pdfkit'
 
 export const runtime = 'nodejs'
@@ -16,37 +17,6 @@ function containsHebrew(text: string): boolean {
 // Detect any RTL characters (Hebrew, Arabic)
 function containsRTL(text: string): boolean {
   return /[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F]/.test(text)
-}
-
-/**
- * Reverse Hebrew text lines for correct RTL rendering in PDFKit (LTR-only renderer).
- *
- * PDFKit renders all text left-to-right. Hebrew stored in logical order needs to be
- * visually reversed so that when PDFKit draws it LTR, a Hebrew reader reading RTL
- * sees the characters and words in the correct order.
- *
- * Strategy per line:
- *  - If the line is predominantly Hebrew (> 40% Hebrew chars), reverse the ENTIRE
- *    line character-by-character. This flips both word order AND character order,
- *    producing the correct visual result when the LTR engine draws it.
- *  - If the line is mixed but has some Hebrew, we reverse the Hebrew segments
- *    in-place and then reverse the whole line so Hebrew segments end up on the right.
- *  - Non-Hebrew lines are left as-is.
- */
-function reverseRTLLine(line: string): string {
-  const hebrewChars = (line.match(/[\u0590-\u05FF]/g) || []).length
-  const totalAlpha = (line.match(/[\u0590-\u05FFa-zA-Z]/g) || []).length
-  if (totalAlpha === 0 || hebrewChars / totalAlpha < 0.3) return line
-
-  // Reverse the entire line character by character.
-  // This makes the first Hebrew word (which should appear rightmost) end up
-  // at the right edge of the rendered text, and characters within each word
-  // appear in correct reading order.
-  return line.split('').reverse().join('')
-}
-
-function reverseRTLText(text: string): string {
-  return text.split('\n').map(reverseRTLLine).join('\n')
 }
 
 export async function GET(
@@ -92,15 +62,6 @@ export async function GET(
       year: 'numeric', month: 'long', day: 'numeric',
     }) : 'N/A'
 
-    // Check if the scenario has any Hebrew/RTL content
-    const allContent = [
-      scenario.name, scenario.company, scenario.overview, scenario.companyGoals,
-      scenario.aiAutomationsRequired, scenario.demoFocusAreas, scenario.scriptsFlows,
-      scenario.knowledgeBaseText, scenario.faqObjectionHandling, scenario.requiredIntegrations,
-      scenario.erpCrmCcaas,
-    ].filter(Boolean).join(' ')
-    const hasHebrew = containsHebrew(allContent)
-
     const doc = new PDFDocument({
       size: 'A4',
       margins: { top: 50, bottom: 60, left: 50, right: 50 },
@@ -120,8 +81,10 @@ export async function GET(
       console.error('[PDF] Font registration failed:', err)
     }
 
-    // Logo path
+    // Logo path - check if it exists before using
     const logoPath = path.join(fontsDir, 'massapro-logo.png')
+    const logoExists = fs.existsSync(logoPath)
+    console.log('[PDF] Logo path:', logoPath, 'exists:', logoExists)
 
     const purple = '#7C3AED'
     const darkGray = '#1F2937'
@@ -137,7 +100,7 @@ export async function GET(
 
     // Add footer logo on pages 2+
     const addFooterLogo = () => {
-      if (pageNumber >= 2) {
+      if (pageNumber >= 2 && logoExists) {
         try {
           const footerLogoSize = 24
           doc.image(logoPath, PAGE_WIDTH - MARGIN - footerLogoSize, PAGE_HEIGHT - 40, {
@@ -145,7 +108,7 @@ export async function GET(
             height: footerLogoSize,
           })
         } catch (e) {
-          // If logo fails, skip silently
+          console.error('[PDF] Footer logo error:', e)
         }
       }
     }
@@ -169,7 +132,8 @@ export async function GET(
 
     // Helper: draw a section
     // - Section NUMBER and TITLE are always LTR, left-aligned
-    // - Body CONTENT is right-aligned if Hebrew, left-aligned otherwise
+    // - Body CONTENT is right-aligned if Hebrew/RTL, left-aligned otherwise
+    // - NO text reversal — PDFKit + PDF viewers handle BiDi natively
     const drawSection = (number: number, title: string, content: string | null | undefined) => {
       if (!content || content.trim() === '') return
 
@@ -185,15 +149,12 @@ export async function GET(
       doc.text(`${number}. ${title}`, { continued: false, align: 'left' })
       doc.moveDown(0.3)
 
-      // Body content
+      // Body content: right-aligned if Hebrew/RTL, left-aligned otherwise
       const bodyFont = isRTL ? 'DejaVuSans' : 'Helvetica'
       const contentAlign = isRTL ? 'right' as const : 'left' as const
 
-      // For RTL content, reverse the text so PDFKit's LTR rendering produces correct visual output
-      const displayContent = isRTL ? reverseRTLText(content) : content
-
       doc.font(bodyFont).fontSize(10).fillColor(bodyGray)
-      doc.text(displayContent, { lineGap: 3, align: contentAlign })
+      doc.text(content, { lineGap: 3, align: contentAlign })
       doc.moveDown(0.8)
     }
 
@@ -202,10 +163,12 @@ export async function GET(
     doc.rect(0, 0, PAGE_WIDTH, 90).fill(purple)
 
     // Logo at top-left of the banner
-    try {
-      doc.image(logoPath, 15, 12, { width: 66, height: 66 })
-    } catch (e) {
-      // If logo fails, skip silently
+    if (logoExists) {
+      try {
+        doc.image(logoPath, 15, 12, { width: 66, height: 66 })
+      } catch (e) {
+        console.error('[PDF] Header logo error:', e)
+      }
     }
 
     // Title text - always LTR, positioned after the logo
@@ -216,9 +179,8 @@ export async function GET(
     const nameIsHebrew = containsRTL(scenario.name)
     const subtitleFont = nameIsHebrew ? 'DejaVuSans' : 'Helvetica'
     const subtitleAlign = nameIsHebrew ? 'right' as const : 'left' as const
-    const displaySubtitle = nameIsHebrew ? reverseRTLText(scenario.name) : scenario.name
     doc.font(subtitleFont).fontSize(10).fillColor('#E9D5FF')
-    doc.text(displaySubtitle, 90, 55, { width: PAGE_WIDTH - 140, align: subtitleAlign })
+    doc.text(scenario.name, 90, 55, { width: PAGE_WIDTH - 140, align: subtitleAlign })
 
     doc.y = 110
 
@@ -228,7 +190,7 @@ export async function GET(
       doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
       doc.text('Customer Name:', { continued: false, align: 'left' })
       doc.font('DejaVuSans').fontSize(11).fillColor(bodyGray)
-      doc.text(reverseRTLText(companyName), { align: 'right' })
+      doc.text(companyName, { align: 'right' })
     } else {
       doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
       doc.text('Customer Name: ', { continued: true, align: 'left' })
@@ -280,10 +242,8 @@ export async function GET(
         const bodyFont = kpiIsHebrew ? 'DejaVuSans' : 'Helvetica'
         const kpiAlign = kpiIsHebrew ? 'right' as const : 'left' as const
 
-        const displayName = kpiIsHebrew ? reverseRTLText(kpi.name) : kpi.name
-
         doc.font(boldFont).fontSize(10).fillColor(bodyGray)
-        doc.text(`• ${displayName}`, { continued: !!kpi.targetValue, align: kpiAlign })
+        doc.text(`• ${kpi.name}`, { continued: !!kpi.targetValue, align: kpiAlign })
         if (kpi.targetValue) {
           doc.font(bodyFont).fillColor(lightGray)
           doc.text(` — Target: ${kpi.targetValue}`, { align: kpiAlign })
