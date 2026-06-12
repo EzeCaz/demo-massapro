@@ -28,6 +28,8 @@ import ChangeLogPanel from './ChangeLogPanel'
 import AdminNotesPanel from './AdminNotesPanel'
 import TranslationPanel from './TranslationPanel'
 import ScenarioExport from './ScenarioExport'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+import { Separator } from '@/components/ui/separator'
 
 type SortField = 'name' | 'status' | 'updatedAt' | 'createdAt' | 'company' | 'overview' | 'website'
 type SortDir = 'asc' | 'desc'
@@ -89,6 +91,7 @@ export default function DemoDashboard() {
 
   const [activeTab, setActiveTab] = useState<string>('form')
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null)
+  const [previewScenarioId, setPreviewScenarioId] = useState<string | null>(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [newScenarioName, setNewScenarioName] = useState('')
 
@@ -206,6 +209,7 @@ export default function DemoDashboard() {
   }, [scenarios, searchQuery, colFilters, sortField, sortDir])
 
   const currentScenario = scenarios.find((s: any) => s.id === activeScenarioId) || null
+  const previewScenario = scenarios.find((s: any) => s.id === previewScenarioId) || null
 
   const getUniqueColValues = useCallback((key: ColFilterKey): string[] => {
     const set = new Set<string>()
@@ -509,6 +513,11 @@ export default function DemoDashboard() {
     setActiveScenarioId(scenario.id)
     setViewMode('detail')
     setActiveTab('form')
+    setPreviewScenarioId(null)
+  }
+
+  const openPreview = (scenario: any) => {
+    setPreviewScenarioId(scenario.id)
   }
 
   const backToTable = () => {
@@ -1311,16 +1320,16 @@ export default function DemoDashboard() {
                         />
                       </TableCell>
 
-                      {/* Name - editable with open detail link */}
+                      {/* Name - editable with preview link */}
                       <EditableCell scenario={scenario} colKey="name">
                         <span className="font-medium text-sm break-words flex items-center gap-1">
                           <span
                             className="text-vivid-blue hover:underline cursor-pointer"
                             onClick={(e) => {
                               e.stopPropagation()
-                              openScenarioDetail(scenario)
+                              openPreview(scenario)
                             }}
-                            title="Open scenario details"
+                            title="Preview scenario"
                           >
                             {scenario.name}
                           </span>
@@ -1384,8 +1393,8 @@ export default function DemoDashboard() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => openScenarioDetail(scenario)}
-                            title={t('dashboard.openDetail')}
+                            onClick={() => openPreview(scenario)}
+                            title="Preview"
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -1444,6 +1453,175 @@ export default function DemoDashboard() {
             </Table>
           </div>
       )}
+
+      {/* Scenario Preview Panel */}
+      <Sheet open={!!previewScenarioId} onOpenChange={(open) => { if (!open) setPreviewScenarioId(null) }}>
+        <SheetContent side="right" className="w-[520px] sm:max-w-[520px] p-0 overflow-y-auto">
+          {previewScenario && (
+            <>
+              <SheetHeader className="p-4 pb-2 border-b">
+                <div className="flex items-center gap-2">
+                  <SheetTitle className="text-lg">{previewScenario.name}</SheetTitle>
+                  <Badge
+                    variant={previewScenario.status === 'submitted' ? 'default' : 'secondary'}
+                    className={`text-[10px] px-1.5 py-0 ${previewScenario.status === 'submitted' ? 'bg-emerald text-white' : ''}`}
+                  >
+                    {previewScenario.status === 'submitted' ? t('dashboard.submitted') : t('dashboard.draft')}
+                  </Badge>
+                </div>
+                <SheetDescription className="text-sm">
+                  {previewScenario.company || previewScenario.client?.company || 'No company'}
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="p-4 space-y-4">
+                {/* Quick actions */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    className="bg-vivid-blue hover:bg-blue-700"
+                    onClick={() => openScenarioDetail(previewScenario)}
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1" />
+                    Open Full View
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/scenarios/${previewScenario.id}/pdf`)
+                        if (!res.ok) { toast.error('Failed to generate PDF'); return }
+                        const blob = await res.blob()
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `MassaPro-Demo-Form-${previewScenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
+                        document.body.appendChild(a)
+                        a.click()
+                        document.body.removeChild(a)
+                        URL.revokeObjectURL(url)
+                        toast.success('PDF downloaded!')
+                      } catch { toast.error('Failed to generate PDF') }
+                    }}
+                    className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                  >
+                    <FileDown className="h-3.5 w-3.5 mr-1" />
+                    Download PDF
+                  </Button>
+                </div>
+
+                <Separator />
+
+                {/* Scenario details */}
+                <div className="space-y-3">
+                  {previewScenario.companyWebsiteUrl && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Website</p>
+                      <a
+                        href={previewScenario.companyWebsiteUrl.startsWith('http') ? previewScenario.companyWebsiteUrl : `https://${previewScenario.companyWebsiteUrl}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-vivid-blue hover:underline"
+                      >
+                        {previewScenario.companyWebsiteUrl}
+                      </a>
+                    </div>
+                  )}
+
+                  {previewScenario.overview && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Overview</p>
+                      <p className="text-sm whitespace-pre-wrap">{previewScenario.overview}</p>
+                    </div>
+                  )}
+
+                  {previewScenario.companyGoals && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Company Goals</p>
+                      <p className="text-sm whitespace-pre-wrap">{previewScenario.companyGoals}</p>
+                    </div>
+                  )}
+
+                  {previewScenario.aiAutomationsRequired && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">AI / Automations Required</p>
+                      <p className="text-sm whitespace-pre-wrap">{previewScenario.aiAutomationsRequired}</p>
+                    </div>
+                  )}
+
+                  {previewScenario.demoFocusAreas && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Demo Focus Areas</p>
+                      <p className="text-sm whitespace-pre-wrap">{previewScenario.demoFocusAreas}</p>
+                    </div>
+                  )}
+
+                  {(previewScenario.languagesVoice || previewScenario.languagesText) && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {previewScenario.languagesVoice && (
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Voice Languages</p>
+                          <p className="text-sm">{previewScenario.languagesVoice}</p>
+                        </div>
+                      )}
+                      {previewScenario.languagesText && (
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Text Languages</p>
+                          <p className="text-sm">{previewScenario.languagesText}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {previewScenario.scriptsFlows && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Scripts / Flows</p>
+                      <p className="text-sm whitespace-pre-wrap">{previewScenario.scriptsFlows}</p>
+                    </div>
+                  )}
+
+                  {previewScenario.knowledgeBaseText && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Knowledge Base</p>
+                      <p className="text-sm whitespace-pre-wrap line-clamp-6">{previewScenario.knowledgeBaseText}</p>
+                    </div>
+                  )}
+
+                  {previewScenario.faqObjectionHandling && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">FAQ / Objection Handling</p>
+                      <p className="text-sm whitespace-pre-wrap">{previewScenario.faqObjectionHandling}</p>
+                    </div>
+                  )}
+
+                  {previewScenario.requiredIntegrations && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Required Integrations</p>
+                      <p className="text-sm whitespace-pre-wrap">{previewScenario.requiredIntegrations}</p>
+                    </div>
+                  )}
+
+                  {previewScenario.erpCrmCcaas && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">ERP / CRM / CCaaS</p>
+                      <p className="text-sm whitespace-pre-wrap">{previewScenario.erpCrmCcaas}</p>
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+
+                {/* Meta info */}
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Updated: {new Date(previewScenario.updatedAt).toLocaleDateString()}</span>
+                  <span>Created: {new Date(previewScenario.createdAt).toLocaleDateString()}</span>
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
