@@ -65,7 +65,7 @@ function getColValue(scenario: any, key: ColFilterKey): string {
   switch (key) {
     case 'name': return scenario.name || ''
     case 'status': return scenario.status || ''
-    case 'company': return scenario.client?.company || scenario.client?.name || ''
+    case 'company': return scenario.company || scenario.client?.company || scenario.client?.name || ''
     case 'website': return scenario.companyWebsiteUrl || ''
     case 'overview': return scenario.overview || ''
     case 'updatedAt': return scenario.updatedAt ? new Date(scenario.updatedAt).toLocaleDateString() : ''
@@ -77,7 +77,7 @@ function getColValue(scenario: any, key: ColFilterKey): string {
 // Get raw value for editing from a scenario object
 function getEditValue(scenario: any, apiField: EditableField): string {
   if (apiField === 'companyWebsiteUrl') return scenario.companyWebsiteUrl || ''
-  if (apiField === 'company') return scenario.client?.company || ''
+  if (apiField === 'company') return scenario.company || scenario.client?.company || ''
   return (scenario as any)[apiField] || ''
 }
 
@@ -149,6 +149,7 @@ export default function DemoDashboard() {
         s.overview?.toLowerCase().includes(q) ||
         s.client?.name?.toLowerCase().includes(q) ||
         s.client?.company?.toLowerCase().includes(q) ||
+        s.company?.toLowerCase().includes(q) ||
         s.companyWebsiteUrl?.toLowerCase().includes(q)
       )
     }
@@ -174,8 +175,8 @@ export default function DemoDashboard() {
           valB = b.status || ''
           break
         case 'company':
-          valA = (a.client?.company || '').toLowerCase()
-          valB = (b.client?.company || '').toLowerCase()
+          valA = (a.company || a.client?.company || '').toLowerCase()
+          valB = (b.company || b.client?.company || '').toLowerCase()
           break
         case 'overview':
           valA = (a.overview || '').toLowerCase()
@@ -289,7 +290,7 @@ export default function DemoDashboard() {
     // Initialize company mode
     if (colKey === 'company') {
       const existingCompanies = Array.from(new Set(
-        scenarios.map((s: any) => s.client?.company).filter(Boolean) as string[]
+        scenarios.map((s: any) => s.company || s.client?.company).filter(Boolean) as string[]
       )).sort()
       if (existingCompanies.includes(val)) {
         setCompanyMode('select')
@@ -331,17 +332,12 @@ export default function DemoDashboard() {
     try {
       let ok = false
 
-      // Company edits go through the clients API
+      // Company edits go through the scenarios API (per-scenario company)
       if (apiField === 'company') {
-        const clientId = scenario.client?.id
-        if (!clientId) {
-          toast.error('No client found')
-          return
-        }
-        const res = await fetch('/api/admin/clients', {
+        const res = await fetch(`/api/scenarios/${scenarioId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: clientId, company: value }),
+          body: JSON.stringify({ company: value }),
         })
         ok = res.ok
       } else {
@@ -358,7 +354,6 @@ export default function DemoDashboard() {
         if (pushToUndo) {
           setUndoStack(prev => [...prev, {
             scenarioId, apiField, oldValue, newValue: value,
-            ...(apiField === 'company' ? { clientId: scenario.client?.id } : {}),
           }])
           setRedoStack([])
         }
@@ -413,21 +408,12 @@ export default function DemoDashboard() {
 
     try {
       let ok = false
-      if (entry.apiField === 'company' && entry.clientId) {
-        const res = await fetch('/api/admin/clients', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: entry.clientId, company: entry.oldValue }),
-        })
-        ok = res.ok
-      } else {
-        const res = await fetch(`/api/scenarios/${entry.scenarioId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [entry.apiField]: entry.oldValue }),
-        })
-        ok = res.ok
-      }
+      const res = await fetch(`/api/scenarios/${entry.scenarioId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [entry.apiField]: entry.oldValue }),
+      })
+      ok = res.ok
       if (ok) {
         toast.success('Undo')
         setUndoStack(prev => prev.slice(0, -1))
@@ -451,21 +437,12 @@ export default function DemoDashboard() {
 
     try {
       let ok = false
-      if (entry.apiField === 'company' && entry.clientId) {
-        const res = await fetch('/api/admin/clients', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: entry.clientId, company: entry.newValue }),
-        })
-        ok = res.ok
-      } else {
-        const res = await fetch(`/api/scenarios/${entry.scenarioId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [entry.apiField]: entry.newValue }),
-        })
-        ok = res.ok
-      }
+      const res = await fetch(`/api/scenarios/${entry.scenarioId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [entry.apiField]: entry.newValue }),
+      })
+      ok = res.ok
       if (ok) {
         toast.success('Redo')
         setRedoStack(prev => prev.slice(0, -1))
@@ -495,9 +472,14 @@ export default function DemoDashboard() {
         body: JSON.stringify({ name: newScenarioName, order: scenarios.length }),
       })
       if (res.ok) {
+        const newScenario = await res.json()
         toast.success('Scenario added!')
         setAddDialogOpen(false)
         setNewScenarioName('')
+        // Auto-open the scenario detail view
+        setActiveScenarioId(newScenario.id)
+        setViewMode('detail')
+        setActiveTab('form')
         queryClient.invalidateQueries({ queryKey: ['scenarios'] })
       }
     } catch (error) {
@@ -713,7 +695,7 @@ export default function DemoDashboard() {
       // Company select: native <select> dropdown with existing companies + "Add new" option
       if (editType === 'company-select') {
         const existingCompanies = Array.from(new Set(
-          scenarios.map((s: any) => s.client?.company).filter(Boolean) as string[]
+          scenarios.map((s: any) => s.company || s.client?.company).filter(Boolean) as string[]
         )).sort()
 
         const selectedInDropdown = existingCompanies.includes(editValue) ? editValue : ''
@@ -1037,6 +1019,36 @@ export default function DemoDashboard() {
           </Popover>
 
           <div className="flex items-center gap-1 ml-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const res = await fetch(`/api/scenarios/${currentScenario.id}/pdf`)
+                  if (!res.ok) {
+                    toast.error('Failed to generate PDF')
+                    return
+                  }
+                  const blob = await res.blob()
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `MassaPro-Demo-Form-${currentScenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
+                  document.body.appendChild(a)
+                  a.click()
+                  document.body.removeChild(a)
+                  URL.revokeObjectURL(url)
+                  toast.success('PDF downloaded!')
+                } catch (error) {
+                  toast.error('Failed to generate PDF')
+                }
+              }}
+              title="Download PDF"
+              className="border-purple-300 text-purple-700 hover:bg-purple-50"
+            >
+              <Download className="h-3.5 w-3.5 mr-1" />
+              PDF
+            </Button>
             <Button variant="ghost" size="sm" onClick={async () => {
               const newName = prompt('New name:', currentScenario.name)
               if (newName && newName.trim()) {
@@ -1317,7 +1329,7 @@ export default function DemoDashboard() {
                       {/* Company - editable (company select with existing + add new) */}
                       <EditableCell scenario={scenario} colKey="company">
                         <span className="text-sm text-muted-foreground break-words">
-                          {scenario.client?.company || scenario.client?.name || '—'}
+                          {scenario.company || scenario.client?.company || scenario.client?.name || '—'}
                         </span>
                       </EditableCell>
 

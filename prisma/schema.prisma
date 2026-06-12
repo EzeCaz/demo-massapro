@@ -5,7 +5,6 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -34,36 +33,46 @@ model Scenario {
   name                      String
   order                     Int               @default(0)
   status                    String            @default("draft") // "draft" or "submitted"
+  company                   String? // Per-scenario company override
   companyWebsiteUrl         String?
   overview                  String?
   overviewEs                String?
   overviewEn                String?
+  overviewHe                String?
   companyGoals              String?
   companyGoalsEs            String?
   companyGoalsEn            String?
+  companyGoalsHe            String?
   aiAutomationsRequired     String?
   aiAutomationsRequiredEs   String?
   aiAutomationsRequiredEn   String?
+  aiAutomationsRequiredHe   String?
   demoFocusAreas            String?
   demoFocusAreasEs          String?
   demoFocusAreasEn          String?
+  demoFocusAreasHe          String?
   languagesVoice            String?
   languagesText             String?
   scriptsFlows              String?
   scriptsFlowsEs            String?
   scriptsFlowsEn            String?
+  scriptsFlowsHe            String?
   knowledgeBaseText         String?
   knowledgeBaseTextEs       String?
   knowledgeBaseTextEn       String?
+  knowledgeBaseTextHe       String?
   faqObjectionHandling      String?
   faqObjectionHandlingEs    String?
   faqObjectionHandlingEn    String?
+  faqObjectionHandlingHe    String?
   requiredIntegrations      String?
   requiredIntegrationsEs    String?
   requiredIntegrationsEn    String?
+  requiredIntegrationsHe    String?
   erpCrmCcaas               String?
   erpCrmCcaasEs             String?
   erpCrmCcaasEn             String?
+  erpCrmCcaasHe             String?
   submittedDate             DateTime?
   createdAt                 DateTime          @default(now())
   updatedAt                 DateTime          @updatedAt

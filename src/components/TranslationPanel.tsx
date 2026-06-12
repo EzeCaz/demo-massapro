@@ -21,7 +21,7 @@ interface TranslationPanelProps {
 export default function TranslationPanel({ scenarioId, scenario }: TranslationPanelProps) {
   const { t } = useLanguage()
   const queryClient = useQueryClient()
-  const [direction, setDirection] = useState<'es-to-en' | 'en-to-es'>('es-to-en')
+  const [direction, setDirection] = useState<'es-to-en' | 'en-to-es' | 'he-to-en' | 'en-to-he' | 'es-to-he' | 'he-to-es'>('es-to-en')
   const [selectedFields, setSelectedFields] = useState<string[]>([])
   const [translating, setTranslating] = useState(false)
   const [translations, setTranslations] = useState<Record<string, string>>({})
@@ -82,7 +82,19 @@ export default function TranslationPanel({ scenarioId, scenario }: TranslationPa
         if (direction === 'es-to-en') {
           const enField = field + 'En'
           updateData[enField] = value
-        } else {
+        } else if (direction === 'en-to-es') {
+          const esField = field + 'Es'
+          updateData[esField] = value
+        } else if (direction === 'he-to-en') {
+          const enField = field + 'En'
+          updateData[enField] = value
+        } else if (direction === 'en-to-he') {
+          const heField = field + 'He'
+          updateData[heField] = value
+        } else if (direction === 'es-to-he') {
+          const heField = field + 'He'
+          updateData[heField] = value
+        } else if (direction === 'he-to-es') {
           const esField = field + 'Es'
           updateData[esField] = value
         }
@@ -109,11 +121,14 @@ export default function TranslationPanel({ scenarioId, scenario }: TranslationPa
 
   // Show existing translations
   const getExistingTranslation = (fieldKey: string) => {
-    if (direction === 'es-to-en') {
+    if (direction === 'es-to-en' || direction === 'he-to-en') {
       return (scenario as any)[fieldKey + 'En'] || ''
-    } else {
+    } else if (direction === 'en-to-es' || direction === 'he-to-es') {
       return (scenario as any)[fieldKey + 'Es'] || ''
+    } else if (direction === 'en-to-he' || direction === 'es-to-he') {
+      return (scenario as any)[fieldKey + 'He'] || ''
     }
+    return ''
   }
 
   return (
@@ -135,6 +150,10 @@ export default function TranslationPanel({ scenarioId, scenario }: TranslationPa
             <SelectContent>
               <SelectItem value="es-to-en">{t('translate.toEnglish')}</SelectItem>
               <SelectItem value="en-to-es">{t('translate.toSpanish')}</SelectItem>
+              <SelectItem value="he-to-en">Hebrew → English</SelectItem>
+              <SelectItem value="en-to-he">English → Hebrew</SelectItem>
+              <SelectItem value="es-to-he">Spanish → Hebrew</SelectItem>
+              <SelectItem value="he-to-es">Hebrew → Spanish</SelectItem>
             </SelectContent>
           </Select>
         </div>

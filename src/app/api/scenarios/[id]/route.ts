@@ -111,16 +111,16 @@ export async function PUT(
     // Update scenario
     const updateData: any = {}
     const allowedFields = [
-      'name', 'order', 'companyWebsiteUrl', 'overview', 'overviewEs', 'overviewEn',
-      'companyGoals', 'companyGoalsEs', 'companyGoalsEn',
-      'aiAutomationsRequired', 'aiAutomationsRequiredEs', 'aiAutomationsRequiredEn',
-      'demoFocusAreas', 'demoFocusAreasEs', 'demoFocusAreasEn',
+      'name', 'order', 'company', 'companyWebsiteUrl', 'overview', 'overviewEs', 'overviewEn', 'overviewHe',
+      'companyGoals', 'companyGoalsEs', 'companyGoalsEn', 'companyGoalsHe',
+      'aiAutomationsRequired', 'aiAutomationsRequiredEs', 'aiAutomationsRequiredEn', 'aiAutomationsRequiredHe',
+      'demoFocusAreas', 'demoFocusAreasEs', 'demoFocusAreasEn', 'demoFocusAreasHe',
       'languagesVoice', 'languagesText',
-      'scriptsFlows', 'scriptsFlowsEs', 'scriptsFlowsEn',
-      'knowledgeBaseText', 'knowledgeBaseTextEs', 'knowledgeBaseTextEn',
-      'faqObjectionHandling', 'faqObjectionHandlingEs', 'faqObjectionHandlingEn',
-      'requiredIntegrations', 'requiredIntegrationsEs', 'requiredIntegrationsEn',
-      'erpCrmCcaas', 'erpCrmCcaasEs', 'erpCrmCcaasEn',
+      'scriptsFlows', 'scriptsFlowsEs', 'scriptsFlowsEn', 'scriptsFlowsHe',
+      'knowledgeBaseText', 'knowledgeBaseTextEs', 'knowledgeBaseTextEn', 'knowledgeBaseTextHe',
+      'faqObjectionHandling', 'faqObjectionHandlingEs', 'faqObjectionHandlingEn', 'faqObjectionHandlingHe',
+      'requiredIntegrations', 'requiredIntegrationsEs', 'requiredIntegrationsEn', 'requiredIntegrationsHe',
+      'erpCrmCcaas', 'erpCrmCcaasEs', 'erpCrmCcaasEn', 'erpCrmCcaasHe',
     ]
 
     for (const field of allowedFields) {

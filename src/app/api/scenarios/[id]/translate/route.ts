@@ -16,7 +16,7 @@ export async function POST(
 
     const { id } = await params
     const body = await req.json()
-    const { fields, direction } = body // direction: 'es-to-en', 'en-to-es', or 'auto'
+    const { fields, direction } = body // direction: 'es-to-en', 'en-to-es', 'he-to-en', 'en-to-he', 'es-to-he', 'he-to-es', or 'auto'
 
     const scenario = await db.scenario.findUnique({ where: { id } })
     if (!scenario) {
@@ -26,6 +26,16 @@ export async function POST(
     const translations: Record<string, string> = {}
     const errors: string[] = []
 
+    // Map direction to source/target languages
+    const directionLangMap: Record<string, [string, string]> = {
+      'es-to-en': ['Spanish', 'English'],
+      'en-to-es': ['English', 'Spanish'],
+      'he-to-en': ['Hebrew', 'English'],
+      'en-to-he': ['English', 'Hebrew'],
+      'es-to-he': ['Spanish', 'Hebrew'],
+      'he-to-es': ['Hebrew', 'Spanish'],
+    }
+
     for (const field of fields) {
       const sourceText = (scenario as any)[field]
       if (!sourceText || sourceText.trim() === '') continue
@@ -33,12 +43,8 @@ export async function POST(
       let sourceLang: string
       let targetLang: string
 
-      if (direction === 'es-to-en') {
-        sourceLang = 'Spanish'
-        targetLang = 'English'
-      } else if (direction === 'en-to-es') {
-        sourceLang = 'English'
-        targetLang = 'Spanish'
+      if (directionLangMap[direction]) {
+        [sourceLang, targetLang] = directionLangMap[direction]
       } else {
         // Auto: determine based on which translation fields are empty
         const enValue = (scenario as any)[field + 'En']
@@ -65,16 +71,21 @@ export async function POST(
 
     // Save translations to the scenario
     const updateData: any = {}
+    // Map direction to target field suffix
+    const directionSuffixMap: Record<string, string> = {
+      'es-to-en': 'En',
+      'en-to-es': 'Es',
+      'he-to-en': 'En',
+      'en-to-he': 'He',
+      'es-to-he': 'He',
+      'he-to-es': 'Es',
+    }
     for (const [field, value] of Object.entries(translations)) {
-      if (direction === 'es-to-en') {
-        const enField = field + 'En'
-        if (enField in scenario) {
-          updateData[enField] = value
-        }
-      } else if (direction === 'en-to-es') {
-        const esField = field + 'Es'
-        if (esField in scenario) {
-          updateData[esField] = value
+      if (directionSuffixMap[direction]) {
+        const suffix = directionSuffixMap[direction]
+        const targetField = field + suffix
+        if (targetField in scenario) {
+          updateData[targetField] = value
         }
       } else {
         // Auto: save to both En and Es suffixes based on what's empty
