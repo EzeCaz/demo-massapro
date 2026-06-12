@@ -2,18 +2,39 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
+import path from 'path'
 import PDFDocument from 'pdfkit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+// Detect Hebrew characters in text
+function containsHebrew(text: string): boolean {
+  return /[\u0590-\u05FF]/.test(text)
+}
+
+// Detect any RTL characters (Hebrew, Arabic)
+function containsRTL(text: string): boolean {
+  return /[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F]/.test(text)
+}
+
+// Reverse Hebrew/RTL text lines for correct visual display in LTR PDF
+// PDFKit doesn't natively handle RTL, so we reverse the character order
+function reverseRTLText(text: string): string {
+  return text.split('\n').map(line => {
+    if (/[\u0590-\u05FF\u0600-\u06FF]/.test(line)) {
+      // Reverse the line character by character for visual RTL display
+      return line.split('').reverse().join('')
+    }
+    return line
+  }).join('\n')
+}
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    console.log('[PDF] Starting PDF generation request')
-
     const session = await getServerSession(authOptions)
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -46,8 +67,6 @@ export async function GET(
       }
     }
 
-    console.log('[PDF] Scenario loaded:', scenario.name)
-
     // Generate PDF
     const companyName = scenario.company || scenario.client?.company || scenario.client?.name || 'N/A'
     const proposedDate = scenario.createdAt ? new Date(scenario.createdAt).toLocaleDateString('en-US', {
@@ -64,12 +83,42 @@ export async function GET(
       },
     })
 
-    console.log('[PDF] PDFDocument created')
+    // Register Unicode-supporting fonts for Hebrew/multi-language text
+    const fontsDir = path.join(process.cwd(), 'src', 'fonts')
+    try {
+      doc.registerFont('DejaVuSans', path.join(fontsDir, 'DejaVuSans.ttf'))
+      doc.registerFont('DejaVuSans-Bold', path.join(fontsDir, 'DejaVuSans-Bold.ttf'))
+    } catch (err) {
+      console.error('[PDF] Font registration failed, falling back to built-in fonts:', err)
+    }
 
     const purple = '#7C3AED'
     const darkGray = '#1F2937'
     const bodyGray = '#374151'
     const lightGray = '#9CA3AF'
+
+    // Choose the best font for the given text
+    const getBodyFont = (text: string): string => {
+      if (containsHebrew(text) || containsRTL(text)) {
+        return 'DejaVuSans'
+      }
+      return 'Helvetica'
+    }
+
+    const getBoldFont = (text: string): string => {
+      if (containsHebrew(text) || containsRTL(text)) {
+        return 'DejaVuSans-Bold'
+      }
+      return 'Helvetica-Bold'
+    }
+
+    // Process text for RTL content
+    const processText = (text: string): string => {
+      if (containsRTL(text)) {
+        return reverseRTLText(text)
+      }
+      return text
+    }
 
     // Helper: draw a section
     const drawSection = (number: number, title: string, content: string | null | undefined) => {
@@ -80,11 +129,17 @@ export async function GET(
         doc.addPage()
       }
 
-      doc.font('Helvetica-Bold').fontSize(12).fillColor(darkGray)
-      doc.text(`${number}. ${title}`, { continued: false })
+      const isHebrew = containsHebrew(content) || containsRTL(content)
+      const boldFont = isHebrew ? 'DejaVuSans-Bold' : 'Helvetica-Bold'
+      const bodyFont = isHebrew ? 'DejaVuSans' : 'Helvetica'
+      const displayContent = isHebrew ? reverseRTLText(content) : content
+      const align = isHebrew ? 'right' as const : 'left' as const
+
+      doc.font(boldFont).fontSize(12).fillColor(darkGray)
+      doc.text(`${number}. ${title}`, { continued: false, align })
       doc.moveDown(0.3)
-      doc.font('Helvetica').fontSize(10).fillColor(bodyGray)
-      doc.text(content, { lineGap: 3 })
+      doc.font(bodyFont).fontSize(10).fillColor(bodyGray)
+      doc.text(displayContent, { lineGap: 3, align })
       doc.moveDown(0.8)
     }
 
@@ -96,17 +151,32 @@ export async function GET(
     doc.font('Helvetica-Bold').fontSize(24).fillColor('#FFFFFF')
     doc.text('MassaPro Demo Form', 50, 25, { width: 495.28 })
 
-    // Subtitle
-    doc.font('Helvetica').fontSize(10).fillColor('#E9D5FF')
-    doc.text(scenario.name, 50, 58, { width: 495.28 })
+    // Subtitle - use DejaVu if scenario name contains Hebrew
+    const nameIsHebrew = containsHebrew(scenario.name) || containsRTL(scenario.name)
+    if (nameIsHebrew) {
+      doc.font('DejaVuSans').fontSize(10).fillColor('#E9D5FF')
+      doc.text(reverseRTLText(scenario.name), 50, 58, { width: 495.28, align: 'right' })
+    } else {
+      doc.font('Helvetica').fontSize(10).fillColor('#E9D5FF')
+      doc.text(scenario.name, 50, 58, { width: 495.28 })
+    }
 
     doc.y = 100
 
     // ===== CUSTOMER INFO =====
-    doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
-    doc.text('Customer Name: ', { continued: true })
-    doc.font('Helvetica').fillColor(bodyGray)
-    doc.text(companyName)
+    // Company name might contain Hebrew
+    const companyIsHebrew = containsHebrew(companyName) || containsRTL(companyName)
+    if (companyIsHebrew) {
+      doc.font('DejaVuSans-Bold').fontSize(11).fillColor(darkGray)
+      doc.text('Customer Name: ', { continued: true })
+      doc.font('DejaVuSans').fillColor(bodyGray)
+      doc.text(reverseRTLText(companyName))
+    } else {
+      doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
+      doc.text('Customer Name: ', { continued: true })
+      doc.font('Helvetica').fillColor(bodyGray)
+      doc.text(companyName)
+    }
 
     doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
     doc.text('Proposed Date: ', { continued: true })
@@ -147,11 +217,19 @@ export async function GET(
       doc.text('KPIs', { continued: false })
       doc.moveDown(0.3)
       scenario.kpis.forEach((kpi: any) => {
-        doc.font('Helvetica-Bold').fontSize(10).fillColor(bodyGray)
-        doc.text(`• ${kpi.name}`, { continued: !!kpi.targetValue })
-        if (kpi.targetValue) {
-          doc.font('Helvetica').fillColor(lightGray)
-          doc.text(` — Target: ${kpi.targetValue}`)
+        const kpiIsHebrew = containsHebrew(kpi.name) || containsRTL(kpi.name)
+        const boldFont = kpiIsHebrew ? 'DejaVuSans-Bold' : 'Helvetica-Bold'
+        const bodyFont = kpiIsHebrew ? 'DejaVuSans' : 'Helvetica'
+        const kpiName = kpiIsHebrew ? reverseRTLText(kpi.name) : kpi.name
+        const kpiTarget = kpi.targetValue
+          ? (containsHebrew(kpi.targetValue) ? reverseRTLText(kpi.targetValue) : kpi.targetValue)
+          : null
+
+        doc.font(boldFont).fontSize(10).fillColor(bodyGray)
+        doc.text(`• ${kpiName}`, { continued: !!kpiTarget })
+        if (kpiTarget) {
+          doc.font(bodyFont).fillColor(lightGray)
+          doc.text(` — Target: ${kpiTarget}`)
         } else {
           doc.text('')
         }
@@ -166,27 +244,14 @@ export async function GET(
     doc.font('Helvetica').fontSize(8).fillColor(lightGray)
     doc.text(`Generated by MassaPro — ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, { align: 'center' })
 
-    console.log('[PDF] Document content written, finalizing...')
-
-    // Collect the PDF buffer using pipe + Writable approach
+    // Collect the PDF buffer
     const chunks: Buffer[] = []
     const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
-      // Set up data collection before ending
       doc.on('data', (chunk: Buffer) => chunks.push(chunk))
-      doc.on('end', () => {
-        console.log('[PDF] Document ended, buffer size:', Buffer.concat(chunks).length)
-        resolve(Buffer.concat(chunks))
-      })
-      doc.on('error', (err: Error) => {
-        console.error('[PDF] Document error:', err)
-        reject(err)
-      })
-
-      // Finalize the document
+      doc.on('end', () => resolve(Buffer.concat(chunks)))
+      doc.on('error', (err: Error) => reject(err))
       doc.end()
     })
-
-    console.log('[PDF] PDF buffer generated successfully, size:', pdfBuffer.length)
 
     const fileName = `MassaPro-Demo-Form-${scenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
 
