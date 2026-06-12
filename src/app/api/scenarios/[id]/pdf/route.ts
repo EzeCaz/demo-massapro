@@ -9,11 +9,6 @@ import PDFDocument from 'pdfkit'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// Detect Hebrew characters in text
-function containsHebrew(text: string): boolean {
-  return /[\u0590-\u05FF]/.test(text)
-}
-
 // Detect any RTL characters (Hebrew, Arabic)
 function containsRTL(text: string): boolean {
   return /[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F]/.test(text)
@@ -78,15 +73,10 @@ export async function GET(
     const logoPath = path.join(fontsDir, 'massapro-logo.png')
     const logoExists = fs.existsSync(logoPath)
 
-    // Track the range of pages for footers
-    // We'll add footers AFTER all content is written by accessing the page ranges
-    let currentPage = 1
-    const pageRanges: { start: number; end: number }[] = [{ start: 1, end: 1 }]
-
     const doc = new PDFDocument({
       size: 'A4',
       margins: { top: 50, bottom: 60, left: 50, right: 50 },
-      bufferPages: true,  // Enable buffered pages so we can add footers after
+      bufferPages: true,
       info: {
         Title: `MassaPro Demo Form - ${scenario.name}`,
         Author: 'MassaPro',
@@ -99,6 +89,75 @@ export async function GET(
       doc.registerFont('DejaVuSans-Bold', path.join(fontsDir, 'DejaVuSans-Bold.ttf'))
     } catch (err) {
       console.error('[PDF] Font registration failed:', err)
+    }
+
+    /**
+     * Draw RTL text correctly in PDFKit.
+     *
+     * PDFKit renders all text left-to-right (LTR). For Hebrew/RTL text to display
+     * correctly, we must:
+     * 1. Manually break text into lines that fit the page width
+     * 2. Reverse the WORD ORDER in each line (so the first word in reading order
+     *    ends up at the rightmost position when rendered LTR)
+     * 3. Render each line individually with align: 'right'
+     *
+     * We must NOT reverse characters within words — fontkit's shaping engine
+     * already handles correct glyph ordering for RTL scripts within each word.
+     */
+    const drawRTLText = (text: string, font: string, fontSize: number, color: string, maxWidth: number, lineGap: number = 3) => {
+      const paragraphs = text.split('\n')
+
+      for (const paragraph of paragraphs) {
+        if (!paragraph.trim()) {
+          doc.moveDown(0.4)
+          continue
+        }
+
+        const words = paragraph.trim().split(/\s+/)
+        let currentLine = ''
+
+        for (const word of words) {
+          const testLine = currentLine ? `${currentLine} ${word}` : word
+          const testWidth = doc.font(font).fontSize(fontSize).widthOfString(testLine)
+
+          if (testWidth > maxWidth && currentLine) {
+            // Current line is full — reverse word order and render it
+            const lineWords = currentLine.split(/\s+/)
+            const reversedLine = lineWords.reverse().join(' ')
+
+            // Check page break
+            if (doc.y > 750) doc.addPage()
+
+            doc.font(font).fontSize(fontSize).fillColor(color)
+            doc.text(reversedLine, MARGIN, doc.y, {
+              width: maxWidth,
+              align: 'right',
+              lineBreak: false,
+            })
+            doc.y += fontSize + lineGap
+
+            currentLine = word
+          } else {
+            currentLine = testLine
+          }
+        }
+
+        // Render the last (or only) line
+        if (currentLine) {
+          const lineWords = currentLine.split(/\s+/)
+          const reversedLine = lineWords.reverse().join(' ')
+
+          if (doc.y > 750) doc.addPage()
+
+          doc.font(font).fontSize(fontSize).fillColor(color)
+          doc.text(reversedLine, MARGIN, doc.y, {
+            width: maxWidth,
+            align: 'right',
+            lineBreak: false,
+          })
+          doc.y += fontSize + lineGap
+        }
+      }
     }
 
     // Helper: draw a section
@@ -117,12 +176,15 @@ export async function GET(
       doc.text(`${number}. ${title}`, { continued: false, align: 'left' })
       doc.moveDown(0.3)
 
-      // Body content: right-aligned if Hebrew/RTL, left-aligned otherwise
-      const bodyFont = isRTL ? 'DejaVuSans' : 'Helvetica'
-      const contentAlign = isRTL ? 'right' as const : 'left' as const
+      if (isRTL) {
+        // Use custom RTL renderer for Hebrew content
+        drawRTLText(content, 'DejaVuSans', 10, bodyGray, CONTENT_WIDTH, 3)
+      } else {
+        // Normal LTR text
+        doc.font('Helvetica').fontSize(10).fillColor(bodyGray)
+        doc.text(content, { lineGap: 3, align: 'left' })
+      }
 
-      doc.font(bodyFont).fontSize(10).fillColor(bodyGray)
-      doc.text(content, { lineGap: 3, align: contentAlign })
       doc.moveDown(0.8)
     }
 
@@ -145,10 +207,15 @@ export async function GET(
 
     // Subtitle - scenario name
     const nameIsHebrew = containsRTL(scenario.name)
-    const subtitleFont = nameIsHebrew ? 'DejaVuSans' : 'Helvetica'
-    const subtitleAlign = nameIsHebrew ? 'right' as const : 'left' as const
-    doc.font(subtitleFont).fontSize(10).fillColor('#E9D5FF')
-    doc.text(scenario.name, 90, 55, { width: PAGE_WIDTH - 140, align: subtitleAlign })
+    if (nameIsHebrew) {
+      // Render Hebrew name using RTL text handler
+      doc.font('DejaVuSans').fontSize(10).fillColor('#E9D5FF')
+      const nameWords = scenario.name.split(/\s+/).reverse().join(' ')
+      doc.text(nameWords, 90, 55, { width: PAGE_WIDTH - 140, align: 'right', lineBreak: false })
+    } else {
+      doc.font('Helvetica').fontSize(10).fillColor('#E9D5FF')
+      doc.text(scenario.name, 90, 55, { width: PAGE_WIDTH - 140, align: 'left' })
+    }
 
     doc.y = 110
 
@@ -157,8 +224,9 @@ export async function GET(
     if (companyIsHebrew) {
       doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
       doc.text('Customer Name:', { continued: false, align: 'left' })
+      const companyWords = companyName.split(/\s+/).reverse().join(' ')
       doc.font('DejaVuSans').fontSize(11).fillColor(bodyGray)
-      doc.text(companyName, { align: 'right' })
+      doc.text(companyWords, { align: 'right', lineBreak: false })
     } else {
       doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
       doc.text('Customer Name: ', { continued: true, align: 'left' })
@@ -206,18 +274,23 @@ export async function GET(
       doc.moveDown(0.3)
       scenario.kpis.forEach((kpi: any) => {
         const kpiIsHebrew = containsRTL(kpi.name)
-        const boldFont = kpiIsHebrew ? 'DejaVuSans-Bold' : 'Helvetica-Bold'
-        const bodyFont = kpiIsHebrew ? 'DejaVuSans' : 'Helvetica'
-        const kpiAlign = kpiIsHebrew ? 'right' as const : 'left' as const
-
-        doc.font(boldFont).fontSize(10).fillColor(bodyGray)
-        doc.text(`• ${kpi.name}`, { continued: !!kpi.targetValue, align: kpiAlign })
-        if (kpi.targetValue) {
-          doc.font(bodyFont).fillColor(lightGray)
-          doc.text(` — Target: ${kpi.targetValue}`, { align: kpiAlign })
+        if (kpiIsHebrew) {
+          const kpiWords = kpi.name.split(/\s+/).reverse().join(' ')
+          doc.font('DejaVuSans-Bold').fontSize(10).fillColor(bodyGray)
+          doc.text(`• ${kpiWords}`, { continued: !!kpi.targetValue, align: 'right', lineBreak: false })
+          if (kpi.targetValue) {
+            doc.font('DejaVuSans').fillColor(lightGray)
+            doc.text(` — Target: ${kpi.targetValue}`, { align: 'right', lineBreak: false })
+          }
         } else {
-          doc.text('')
+          doc.font('Helvetica-Bold').fontSize(10).fillColor(bodyGray)
+          doc.text(`• ${kpi.name}`, { continued: !!kpi.targetValue, align: 'left' })
+          if (kpi.targetValue) {
+            doc.font('Helvetica').fillColor(lightGray)
+            doc.text(` — Target: ${kpi.targetValue}`, { align: 'left' })
+          }
         }
+        doc.text('')
       })
       doc.moveDown(0.8)
     }
@@ -227,7 +300,6 @@ export async function GET(
     doc.moveTo(MARGIN, doc.y + 10).lineTo(PAGE_WIDTH - MARGIN, doc.y + 10).strokeColor(lightGray).lineWidth(0.5).stroke()
 
     // ===== ADD FOOTERS TO ALL PAGES =====
-    // Get the total number of pages (buffered mode lets us switch pages)
     const totalPages = doc.bufferedPageRange()
 
     for (let i = 0; i < totalPages.count; i++) {
@@ -254,7 +326,7 @@ export async function GET(
       }
     }
 
-    // Switch back to last page (required before finalizing)
+    // Switch back to last page
     doc.switchToPage(totalPages.count - 1)
 
     // Collect the PDF buffer
