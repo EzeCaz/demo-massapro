@@ -19,7 +19,7 @@ import { toast } from 'sonner'
 import {
   Plus, Pencil, Trash2, X, Check, Loader2, Download,
   ArrowUpDown, ArrowUp, ArrowDown, Search, Eye, Filter,
-  Undo2, Redo2,
+  Undo2, Redo2, FileDown,
 } from 'lucide-react'
 import ScenarioForm from './ScenarioForm'
 import CollaboratorPanel from './CollaboratorPanel'
@@ -1311,9 +1311,20 @@ export default function DemoDashboard() {
                         />
                       </TableCell>
 
-                      {/* Name - editable */}
+                      {/* Name - editable with open detail link */}
                       <EditableCell scenario={scenario} colKey="name">
-                        <span className="font-medium text-sm break-words">{scenario.name}</span>
+                        <span className="font-medium text-sm break-words flex items-center gap-1">
+                          <span
+                            className="text-vivid-blue hover:underline cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openScenarioDetail(scenario)
+                            }}
+                            title="Open scenario details"
+                          >
+                            {scenario.name}
+                          </span>
+                        </span>
                       </EditableCell>
 
                       {/* Status - editable (select) */}
@@ -1369,7 +1380,7 @@ export default function DemoDashboard() {
 
                       {/* Actions */}
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-0.5">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1377,6 +1388,35 @@ export default function DemoDashboard() {
                             title={t('dashboard.openDetail')}
                           >
                             <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`/api/scenarios/${scenario.id}/pdf`)
+                                if (!res.ok) {
+                                  toast.error('Failed to generate PDF')
+                                  return
+                                }
+                                const blob = await res.blob()
+                                const url = URL.createObjectURL(blob)
+                                const a = document.createElement('a')
+                                a.href = url
+                                a.download = `MassaPro-Demo-Form-${scenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
+                                document.body.appendChild(a)
+                                a.click()
+                                document.body.removeChild(a)
+                                URL.revokeObjectURL(url)
+                                toast.success('PDF downloaded!')
+                              } catch (error) {
+                                toast.error('Failed to generate PDF')
+                              }
+                            }}
+                            title="Download PDF"
+                            className="text-purple-600 hover:text-purple-800 hover:bg-purple-50"
+                          >
+                            <FileDown className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
