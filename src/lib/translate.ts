@@ -1,3 +1,5 @@
+import ZAI from 'z-ai-web-dev-sdk'
+
 // Technical / professional terms that should NEVER be translated
 const TECHNICAL_TERMS = [
   'ERP', 'CRM', 'CCaaS', 'CPaaS', 'CTA', 'CPA', 'KPI', 'AI', 'FAQ', 'URL', 'API',
@@ -15,9 +17,19 @@ export const TRANSLATABLE_FIELDS = [
 
 export const PRESERVED_TERMS = TECHNICAL_TERMS
 
+// Singleton SDK instance
+let zaiInstance: InstanceType<typeof ZAI> | null = null
+
+async function getZAI() {
+  if (!zaiInstance) {
+    zaiInstance = await ZAI.create()
+  }
+  return zaiInstance
+}
+
 /**
- * Call LLM API for translation — supports OpenAI API (with OPENAI_API_KEY env var)
- * or falls back to z-ai-web-dev-sdk (works in z.ai platform environment)
+ * Call LLM API for translation — uses z-ai-web-dev-sdk (primary)
+ * or falls back to OpenAI API (if OPENAI_API_KEY env var is set)
  */
 export async function translateText(text: string, sourceLang: string, targetLang: string): Promise<string> {
   const preserveList = TECHNICAL_TERMS.join(', ')
@@ -40,44 +52,52 @@ IMPORTANT RULES:
 Text to translate:
 ${text}`
 
-  // Try OpenAI API first (works on Vercel)
-  const openaiKey = process.env.OPENAI_API_KEY
-  if (openaiKey) {
-    const baseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
-    const model = process.env.OPENAI_MODEL || 'gpt-4o-mini'
-
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-      }),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`OpenAI API error (${response.status}): ${errorText}`)
-    }
-
-    const data = await response.json()
-    return data.choices?.[0]?.message?.content?.trim() || ''
-  }
-
-  // Fallback: try z-ai-web-dev-sdk (works in z.ai platform)
+  // Try z-ai-web-dev-sdk first (works on Vercel serverless)
   try {
-    const ZAI = (await import('z-ai-web-dev-sdk')).default
-    const sdk = await ZAI.create()
+    const sdk = await getZAI()
     const result = await sdk.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
     })
-    return result.choices?.[0]?.message?.content?.trim() || ''
+    const translated = result.choices?.[0]?.message?.content?.trim() || ''
+    if (translated) return translated
   } catch (err: any) {
-    throw new Error(`No translation provider available. Set OPENAI_API_KEY environment variable. ${err.message}`)
+    console.error('z-ai-web-dev-sdk translation error:', err.message)
+    // Fall through to OpenAI fallback
   }
+
+  // Fallback: Try OpenAI API (if OPENAI_API_KEY env var is set)
+  const openaiKey = process.env.OPENAI_API_KEY
+  if (openaiKey) {
+    try {
+      const baseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
+      const model = process.env.OPENAI_MODEL || 'gpt-4o-mini'
+
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.3,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`OpenAI API error (${response.status}): ${errorText}`)
+      }
+
+      const data = await response.json()
+      const translated = data.choices?.[0]?.message?.content?.trim() || ''
+      if (translated) return translated
+    } catch (err: any) {
+      console.error('OpenAI translation error:', err.message)
+    }
+  }
+
+  throw new Error('All translation providers failed. Please try again later.')
 }

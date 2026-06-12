@@ -36,8 +36,38 @@ export async function POST(
       'he-to-es': ['Hebrew', 'Spanish'],
     }
 
+    // Map direction to the source field suffix (to read the correct language variant)
+    const directionSourceSuffixMap: Record<string, string> = {
+      'es-to-en': 'Es',   // Read from Es field
+      'en-to-es': 'En',   // Read from En field
+      'he-to-en': 'He',   // Read from He field
+      'en-to-he': 'En',   // Read from En field
+      'es-to-he': 'Es',   // Read from Es field
+      'he-to-es': 'He',   // Read from He field
+    }
+
+    // Map direction to target field suffix (to save the translation)
+    const directionTargetSuffixMap: Record<string, string> = {
+      'es-to-en': 'En',
+      'en-to-es': 'Es',
+      'he-to-en': 'En',
+      'en-to-he': 'He',
+      'es-to-he': 'He',
+      'he-to-es': 'Es',
+    }
+
     for (const field of fields) {
-      const sourceText = (scenario as any)[field]
+      // Determine the source text: try the language-specific field first, then fall back to base field
+      let sourceText: string | null = null
+      const sourceSuffix = directionSourceSuffixMap[direction]
+      if (sourceSuffix) {
+        // Try the language-specific field first (e.g., overviewHe for he-to-en)
+        sourceText = (scenario as any)[field + sourceSuffix] || null
+      }
+      // Fall back to the base field if the language-specific field is empty
+      if (!sourceText || sourceText.trim() === '') {
+        sourceText = (scenario as any)[field] || null
+      }
       if (!sourceText || sourceText.trim() === '') continue
 
       let sourceLang: string
@@ -48,10 +78,17 @@ export async function POST(
       } else {
         // Auto: determine based on which translation fields are empty
         const enValue = (scenario as any)[field + 'En']
+        const heValue = (scenario as any)[field + 'He']
         const esValue = (scenario as any)[field + 'Es']
-        if (!enValue && esValue) {
-          sourceLang = 'Spanish'
+        if (!enValue && (esValue || heValue)) {
+          sourceLang = esValue ? 'Spanish' : 'Hebrew'
           targetLang = 'English'
+        } else if (!heValue && (enValue || esValue)) {
+          sourceLang = enValue ? 'English' : 'Spanish'
+          targetLang = 'Hebrew'
+        } else if (!esValue && (enValue || heValue)) {
+          sourceLang = enValue ? 'English' : 'Hebrew'
+          targetLang = 'Spanish'
         } else {
           sourceLang = 'English'
           targetLang = 'Spanish'
@@ -71,31 +108,26 @@ export async function POST(
 
     // Save translations to the scenario
     const updateData: any = {}
-    // Map direction to target field suffix
-    const directionSuffixMap: Record<string, string> = {
-      'es-to-en': 'En',
-      'en-to-es': 'Es',
-      'he-to-en': 'En',
-      'en-to-he': 'He',
-      'es-to-he': 'He',
-      'he-to-es': 'Es',
-    }
     for (const [field, value] of Object.entries(translations)) {
-      if (directionSuffixMap[direction]) {
-        const suffix = directionSuffixMap[direction]
-        const targetField = field + suffix
+      const targetSuffix = directionTargetSuffixMap[direction]
+      if (targetSuffix) {
+        const targetField = field + targetSuffix
         if (targetField in scenario) {
           updateData[targetField] = value
         }
       } else {
-        // Auto: save to both En and Es suffixes based on what's empty
+        // Auto: save to whichever suffix field is empty
         const enField = field + 'En'
         const esField = field + 'Es'
+        const heField = field + 'He'
         if (!(scenario as any)[enField] && enField in scenario) {
           updateData[enField] = value
         }
         if (!(scenario as any)[esField] && esField in scenario) {
           updateData[esField] = value
+        }
+        if (!(scenario as any)[heField] && heField in scenario) {
+          updateData[heField] = value
         }
       }
     }
