@@ -92,20 +92,25 @@ export async function GET(
     }
 
     /**
-     * Draw RTL text correctly in PDFKit.
+     * Draw RTL text correctly in PDFKit using word-by-word positioning.
      *
-     * PDFKit renders all text left-to-right (LTR). For Hebrew/RTL text to display
-     * correctly, we must:
+     * PDFKit renders all text left-to-right (LTR) and does NOT support RTL
+     * text layout. Fontkit's shaping engine handles glyph ordering within each
+     * Hebrew word correctly, but PDFKit lays out words in LTR order and its
+     * 'align: right' mode interacts poorly with fontkit's RTL shaping — causing
+     * spaces between words to be lost or repositioned.
+     *
+     * Solution: Render each word individually at a calculated x position.
      * 1. Manually break text into lines that fit the page width
-     * 2. Reverse the WORD ORDER in each line (so the first word in reading order
-     *    ends up at the rightmost position when rendered LTR)
-     * 3. Render each line individually with align: 'right'
+     * 2. Keep words in RTL reading order (no reversal needed)
+     * 3. Position each word from right to left using widthOfString()
      *
-     * We must NOT reverse characters within words — fontkit's shaping engine
-     * already handles correct glyph ordering for RTL scripts within each word.
+     * This gives us complete control over spacing and eliminates any dependency
+     * on PDFKit's RTL handling or align: 'right'.
      */
     const drawRTLText = (text: string, font: string, fontSize: number, color: string, maxWidth: number, lineGap: number = 3) => {
       const paragraphs = text.split('\n')
+      const rightEdge = PAGE_WIDTH - MARGIN
 
       for (const paragraph of paragraphs) {
         if (!paragraph.trim()) {
@@ -113,51 +118,79 @@ export async function GET(
           continue
         }
 
+        // Split into words (preserving RTL reading order)
         const words = paragraph.trim().split(/\s+/)
-        let currentLine = ''
+
+        // Build lines that fit within maxWidth
+        const lines: string[][] = []
+        let currentLine: string[] = []
+        let currentWidth = 0
 
         for (const word of words) {
-          const testLine = currentLine ? `${currentLine} ${word}` : word
-          const testWidth = doc.font(font).fontSize(fontSize).widthOfString(testLine)
+          const wordWidth = doc.font(font).fontSize(fontSize).widthOfString(word)
+          const spaceWidth = currentLine.length > 0 ? doc.font(font).fontSize(fontSize).widthOfString(' ') : 0
+          const neededWidth = spaceWidth + wordWidth
 
-          if (testWidth > maxWidth && currentLine) {
-            // Current line is full — reverse word order and render it
-            const lineWords = currentLine.split(/\s+/)
-            const reversedLine = lineWords.reverse().join(' ')
-
-            // Check page break
-            if (doc.y > 750) doc.addPage()
-
-            doc.font(font).fontSize(fontSize).fillColor(color)
-            doc.text(reversedLine, MARGIN, doc.y, {
-              width: maxWidth,
-              align: 'right',
-              lineBreak: false,
-            })
-            doc.y += fontSize + lineGap
-
-            currentLine = word
+          if (currentWidth + neededWidth > maxWidth && currentLine.length > 0) {
+            lines.push([...currentLine])
+            currentLine = [word]
+            currentWidth = wordWidth
           } else {
-            currentLine = testLine
+            currentLine.push(word)
+            currentWidth += neededWidth
           }
         }
 
-        // Render the last (or only) line
-        if (currentLine) {
-          const lineWords = currentLine.split(/\s+/)
-          const reversedLine = lineWords.reverse().join(' ')
+        if (currentLine.length > 0) {
+          lines.push(currentLine)
+        }
 
+        // Render each line: position each word individually from right to left
+        for (const line of lines) {
           if (doc.y > 750) doc.addPage()
 
-          doc.font(font).fontSize(fontSize).fillColor(color)
-          doc.text(reversedLine, MARGIN, doc.y, {
-            width: maxWidth,
-            align: 'right',
-            lineBreak: false,
-          })
-          doc.y += fontSize + lineGap
+          const lineY = doc.y
+          const spaceWidth = doc.font(font).fontSize(fontSize).widthOfString(' ')
+
+          // Calculate word widths
+          const wordWidths = line.map(w => doc.font(font).fontSize(fontSize).widthOfString(w))
+
+          // Position words from right to left (RTL reading order)
+          let x = rightEdge
+          for (let i = 0; i < line.length; i++) {
+            x -= wordWidths[i]
+            doc.font(font).fontSize(fontSize).fillColor(color)
+            doc.text(line[i], x, lineY, { lineBreak: false })
+            x -= spaceWidth
+          }
+
+          // Advance to next line
+          doc.y = lineY + fontSize + lineGap
         }
       }
+    }
+
+    /**
+     * Render a short RTL text (single line) word-by-word, right-aligned.
+     * Used for names, titles, and other short text elements.
+     */
+    const drawRTLShortText = (text: string, font: string, fontSize: number, color: string, maxWidth: number, xPos?: number, yPos?: number) => {
+      const rightEdge = (xPos !== undefined ? xPos + maxWidth : PAGE_WIDTH - MARGIN)
+      const words = text.trim().split(/\s+/)
+      const spaceWidth = doc.font(font).fontSize(fontSize).widthOfString(' ')
+      const wordWidths = words.map(w => doc.font(font).fontSize(fontSize).widthOfString(w))
+
+      const lineY = yPos ?? doc.y
+
+      let x = rightEdge
+      for (let i = 0; i < words.length; i++) {
+        x -= wordWidths[i]
+        doc.font(font).fontSize(fontSize).fillColor(color)
+        doc.text(words[i], x, lineY, { lineBreak: false })
+        x -= spaceWidth
+      }
+
+      doc.y = lineY + fontSize
     }
 
     // Helper: draw a section
@@ -208,10 +241,8 @@ export async function GET(
     // Subtitle - scenario name
     const nameIsHebrew = containsRTL(scenario.name)
     if (nameIsHebrew) {
-      // Render Hebrew name using RTL text handler
-      doc.font('DejaVuSans').fontSize(10).fillColor('#E9D5FF')
-      const nameWords = scenario.name.split(/\s+/).reverse().join(' ')
-      doc.text(nameWords, 90, 55, { width: PAGE_WIDTH - 140, align: 'right', lineBreak: false })
+      // Render Hebrew name word-by-word for correct RTL display
+      drawRTLShortText(scenario.name, 'DejaVuSans', 10, '#E9D5FF', PAGE_WIDTH - 140, 90, 55)
     } else {
       doc.font('Helvetica').fontSize(10).fillColor('#E9D5FF')
       doc.text(scenario.name, 90, 55, { width: PAGE_WIDTH - 140, align: 'left' })
@@ -224,9 +255,8 @@ export async function GET(
     if (companyIsHebrew) {
       doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
       doc.text('Customer Name:', { continued: false, align: 'left' })
-      const companyWords = companyName.split(/\s+/).reverse().join(' ')
-      doc.font('DejaVuSans').fontSize(11).fillColor(bodyGray)
-      doc.text(companyWords, { align: 'right', lineBreak: false })
+      // Render Hebrew company name word-by-word for correct RTL display
+      drawRTLShortText(companyName, 'DejaVuSans', 11, bodyGray, CONTENT_WIDTH)
     } else {
       doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
       doc.text('Customer Name: ', { continued: true, align: 'left' })
@@ -275,13 +305,36 @@ export async function GET(
       scenario.kpis.forEach((kpi: any) => {
         const kpiIsHebrew = containsRTL(kpi.name)
         if (kpiIsHebrew) {
-          const kpiWords = kpi.name.split(/\s+/).reverse().join(' ')
+          // Render Hebrew KPI name word-by-word from right to left
+          const kpiY = doc.y
+          const rightEdge = PAGE_WIDTH - MARGIN
+          const spaceWidth = doc.font('DejaVuSans-Bold').fontSize(10).widthOfString(' ')
+
+          // Render bullet first (rightmost position)
+          const bulletWidth = doc.font('DejaVuSans-Bold').fontSize(10).widthOfString('•')
+          let x = rightEdge - bulletWidth
           doc.font('DejaVuSans-Bold').fontSize(10).fillColor(bodyGray)
-          doc.text(`• ${kpiWords}`, { continued: !!kpi.targetValue, align: 'right', lineBreak: false })
-          if (kpi.targetValue) {
-            doc.font('DejaVuSans').fillColor(lightGray)
-            doc.text(` — Target: ${kpi.targetValue}`, { align: 'right', lineBreak: false })
+          doc.text('•', x, kpiY, { lineBreak: false })
+          x -= spaceWidth
+
+          // Render KPI name words from right to left
+          const kpiWords = kpi.name.trim().split(/\s+/)
+          const wordWidths = kpiWords.map(w => doc.font('DejaVuSans-Bold').fontSize(10).widthOfString(w))
+
+          for (let i = 0; i < kpiWords.length; i++) {
+            x -= wordWidths[i]
+            doc.font('DejaVuSans-Bold').fontSize(10).fillColor(bodyGray)
+            doc.text(kpiWords[i], x, kpiY, { lineBreak: false })
+            x -= spaceWidth
           }
+
+          // Render target value if present (LTR, at left side)
+          if (kpi.targetValue) {
+            doc.font('DejaVuSans').fontSize(10).fillColor(lightGray)
+            doc.text(`— Target: ${kpi.targetValue}`, MARGIN, kpiY, { lineBreak: false })
+          }
+
+          doc.y = kpiY + 10 + 3
         } else {
           doc.font('Helvetica-Bold').fontSize(10).fillColor(bodyGray)
           doc.text(`• ${kpi.name}`, { continued: !!kpi.targetValue, align: 'left' })
