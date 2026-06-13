@@ -65,7 +65,8 @@ export async function GET(
     const PAGE_HEIGHT = 841.89
     const MARGIN = 50
     const CONTENT_WIDTH = PAGE_WIDTH - 2 * MARGIN
-    const FOOTER_Y = PAGE_HEIGHT - 35
+    const FOOTER_Y = PAGE_HEIGHT - 40
+    const MAX_CONTENT_Y = 750 // Don't write content below this line
 
     // Register Unicode-supporting fonts for Hebrew/multi-language text
     const fontsDir = path.join(process.cwd(), 'src', 'fonts')
@@ -76,6 +77,7 @@ export async function GET(
       size: 'A4',
       margins: { top: 50, bottom: 60, left: 50, right: 50 },
       bufferPages: true,
+      autoFirstPage: true,
       info: {
         Title: `MassaPro Demo Form - ${scenario.name}`,
         Author: 'MassaPro',
@@ -110,6 +112,7 @@ export async function GET(
     const drawRTLText = (text: string, font: string, fontSize: number, color: string, maxWidth: number, lineGap: number = 3) => {
       const paragraphs = text.split('\n')
       const rightEdge = PAGE_WIDTH - MARGIN
+      const spaceWidth = doc.font(font).fontSize(fontSize).widthOfString(' ')
 
       for (const paragraph of paragraphs) {
         if (!paragraph.trim()) {
@@ -127,8 +130,8 @@ export async function GET(
 
         for (const word of words) {
           const wordWidth = doc.font(font).fontSize(fontSize).widthOfString(word)
-          const spaceWidth = currentLine.length > 0 ? doc.font(font).fontSize(fontSize).widthOfString(' ') : 0
-          const neededWidth = spaceWidth + wordWidth
+          const neededSpace = currentLine.length > 0 ? spaceWidth : 0
+          const neededWidth = neededSpace + wordWidth
 
           if (currentWidth + neededWidth > maxWidth && currentLine.length > 0) {
             lines.push([...currentLine])
@@ -146,24 +149,36 @@ export async function GET(
 
         // Render each line: position each word individually from right to left
         for (const line of lines) {
-          if (doc.y > 750) doc.addPage()
+          // Check if we need a new page before rendering this line
+          if (doc.y > MAX_CONTENT_Y) {
+            doc.addPage()
+          }
 
           const lineY = doc.y
-          const spaceWidth = doc.font(font).fontSize(fontSize).widthOfString(' ')
 
-          // Calculate word widths
+          // Calculate word widths for this line
           const wordWidths = line.map(w => doc.font(font).fontSize(fontSize).widthOfString(w))
+
+          // Calculate total line width to check if it fits
+          const totalLineWidth = wordWidths.reduce((sum, w) => sum + w, 0) + (line.length - 1) * spaceWidth
 
           // Position words from right to left (RTL reading order)
           let x = rightEdge
           for (let i = 0; i < line.length; i++) {
             x -= wordWidths[i]
+            // Use width parameter to constrain the text box to just the word width
+            // This prevents PDFKit from doing any internal repositioning
             doc.font(font).fontSize(fontSize).fillColor(color)
-            doc.text(line[i], x, lineY, { lineBreak: false })
+            doc.text(line[i], x, lineY, { 
+              width: wordWidths[i] + 1, // +1 to avoid clipping
+              lineBreak: false,
+              align: 'left'
+            })
             x -= spaceWidth
           }
 
-          // Advance to next line
+          // Advance to next line position manually
+          doc.x = MARGIN
           doc.y = lineY + fontSize + lineGap
         }
       }
@@ -185,10 +200,15 @@ export async function GET(
       for (let i = 0; i < words.length; i++) {
         x -= wordWidths[i]
         doc.font(font).fontSize(fontSize).fillColor(color)
-        doc.text(words[i], x, lineY, { lineBreak: false })
+        doc.text(words[i], x, lineY, { 
+          width: wordWidths[i] + 1,
+          lineBreak: false,
+          align: 'left'
+        })
         x -= spaceWidth
       }
 
+      doc.x = MARGIN
       doc.y = lineY + fontSize
     }
 
@@ -302,6 +322,7 @@ export async function GET(
       doc.text('KPIs', { continued: false, align: 'left' })
       doc.moveDown(0.3)
       scenario.kpis.forEach((kpi: any) => {
+        if (doc.y > MAX_CONTENT_Y) doc.addPage()
         const kpiIsHebrew = containsRTL(kpi.name)
         if (kpiIsHebrew) {
           // Render Hebrew KPI name word-by-word from right to left
@@ -310,10 +331,10 @@ export async function GET(
           const spaceWidth = doc.font('DejaVuSans-Bold').fontSize(10).widthOfString(' ')
 
           // Render bullet first (rightmost position)
-          const bulletWidth = doc.font('DejaVuSans-Bold').fontSize(10).widthOfString('•')
+          const bulletWidth = doc.font('DejaVuSans-Bold').fontSize(10).widthOfString('\u2022')
           let x = rightEdge - bulletWidth
           doc.font('DejaVuSans-Bold').fontSize(10).fillColor(bodyGray)
-          doc.text('•', x, kpiY, { lineBreak: false })
+          doc.text('\u2022', x, kpiY, { width: bulletWidth + 1, lineBreak: false, align: 'left' })
           x -= spaceWidth
 
           // Render KPI name words from right to left
@@ -323,23 +344,24 @@ export async function GET(
           for (let i = 0; i < kpiWords.length; i++) {
             x -= wordWidths[i]
             doc.font('DejaVuSans-Bold').fontSize(10).fillColor(bodyGray)
-            doc.text(kpiWords[i], x, kpiY, { lineBreak: false })
+            doc.text(kpiWords[i], x, kpiY, { width: wordWidths[i] + 1, lineBreak: false, align: 'left' })
             x -= spaceWidth
           }
 
           // Render target value if present (LTR, at left side)
           if (kpi.targetValue) {
             doc.font('DejaVuSans').fontSize(10).fillColor(lightGray)
-            doc.text(`— Target: ${kpi.targetValue}`, MARGIN, kpiY, { lineBreak: false })
+            doc.text(`\u2014 Target: ${kpi.targetValue}`, MARGIN, kpiY, { lineBreak: false })
           }
 
+          doc.x = MARGIN
           doc.y = kpiY + 10 + 3
         } else {
           doc.font('Helvetica-Bold').fontSize(10).fillColor(bodyGray)
-          doc.text(`• ${kpi.name}`, { continued: !!kpi.targetValue, align: 'left' })
+          doc.text(`\u2022 ${kpi.name}`, { continued: !!kpi.targetValue, align: 'left' })
           if (kpi.targetValue) {
             doc.font('Helvetica').fillColor(lightGray)
-            doc.text(` — Target: ${kpi.targetValue}`, { align: 'left' })
+            doc.text(` \u2014 Target: ${kpi.targetValue}`, { align: 'left' })
           }
         }
         doc.text('')
@@ -352,17 +374,25 @@ export async function GET(
     doc.moveTo(MARGIN, doc.y + 10).lineTo(PAGE_WIDTH - MARGIN, doc.y + 10).strokeColor(lightGray).lineWidth(0.5).stroke()
 
     // ===== ADD FOOTERS TO ALL PAGES =====
-    const totalPages = doc.bufferedPageRange()
-    const pageCount = totalPages.count
+    // Get the ACTUAL content page count before adding footers
+    const range = doc.bufferedPageRange()
+    const pageCount = range.count
     const footerDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
+    console.log(`[PDF] Total content pages before footer: ${pageCount}`)
 
     for (let i = 0; i < pageCount; i++) {
       doc.switchToPage(i)
 
+      // CRITICAL: Save cursor position before footer, restore after.
+      // This prevents footer text from moving doc.y and triggering auto page breaks.
+      const savedX = doc.x
+      const savedY = doc.y
+
       // Bottom-left: "Generated by MassaPro — Month DD, YYYY"
       doc.font('Helvetica').fontSize(7).fillColor(lightGray)
       doc.text(
-        `Generated by MassaPro — ${footerDate}`,
+        `Generated by MassaPro \u2014 ${footerDate}`,
         MARGIN, FOOTER_Y,
         { width: CONTENT_WIDTH / 3, align: 'left', lineBreak: false }
       )
@@ -389,10 +419,14 @@ export async function GET(
           console.error('[PDF] Footer logo error on page', i + 1, ':', e)
         }
       }
+
+      // Restore cursor to prevent auto-page-break from footer text
+      doc.x = savedX
+      doc.y = savedY
     }
 
-    // Switch back to last page
-    doc.switchToPage(pageCount - 1)
+    // Don't switch back to last page — just end the document
+    // Switching back can trigger unwanted page effects
 
     // Collect the PDF buffer
     const chunks: Buffer[] = []
@@ -402,6 +436,8 @@ export async function GET(
       doc.on('error', (err: Error) => reject(err))
       doc.end()
     })
+
+    console.log(`[PDF] Generated PDF size: ${pdfBuffer.length} bytes, pages: ${pageCount}`)
 
     const fileName = `MassaPro-Demo-Form-${scenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
 
