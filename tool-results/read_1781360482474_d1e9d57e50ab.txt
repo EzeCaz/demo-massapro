@@ -1,0 +1,1628 @@
+     1→'use client'
+     2→
+     3→import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+     4→import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+     5→import { useLanguage } from '@/hooks/useLanguage'
+     6→import { useSession } from 'next-auth/react'
+     7→import { Button } from '@/components/ui/button'
+     8→import { Input } from '@/components/ui/input'
+     9→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    10→import { Badge } from '@/components/ui/badge'
+    11→import { Card, CardContent } from '@/components/ui/card'
+    12→import { Checkbox } from '@/components/ui/checkbox'
+    13→import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+    14→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+    15→import {
+    16→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    17→} from '@/components/ui/table'
+    18→import { toast } from 'sonner'
+    19→import {
+    20→  Plus, Pencil, Trash2, X, Check, Loader2, Download,
+    21→  ArrowUpDown, ArrowUp, ArrowDown, Search, Eye, Filter,
+    22→  Undo2, Redo2, FileDown,
+    23→} from 'lucide-react'
+    24→import ScenarioForm from './ScenarioForm'
+    25→import CollaboratorPanel from './CollaboratorPanel'
+    26→import CommentsPanel from './CommentsPanel'
+    27→import ChangeLogPanel from './ChangeLogPanel'
+    28→import AdminNotesPanel from './AdminNotesPanel'
+    29→import TranslationPanel from './TranslationPanel'
+    30→import ScenarioExport from './ScenarioExport'
+    31→import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+    32→import { Separator } from '@/components/ui/separator'
+    33→
+    34→type SortField = 'name' | 'status' | 'updatedAt' | 'createdAt' | 'company' | 'overview' | 'website'
+    35→type SortDir = 'asc' | 'desc'
+    36→
+    37→type ColFilterKey = 'name' | 'status' | 'company' | 'website' | 'overview' | 'updatedAt' | 'createdAt'
+    38→type ColFilters = Record<ColFilterKey, string>
+    39→
+    40→const COL_FILTER_KEYS: ColFilterKey[] = ['name', 'status', 'company', 'website', 'overview', 'updatedAt', 'createdAt']
+    41→
+    42→// Editable field definitions — maps table column key to the API field name
+    43→type EditableField = 'name' | 'status' | 'companyWebsiteUrl' | 'overview' | 'company'
+    44→
+    45→// Fields editable for ALL users
+    46→const EDITABLE_FIELDS: { colKey: string; apiField: EditableField; type: 'text' | 'select' | 'company-select' }[] = [
+    47→  { colKey: 'name', apiField: 'name', type: 'text' },
+    48→  { colKey: 'status', apiField: 'status', type: 'select' },
+    49→  { colKey: 'company', apiField: 'company', type: 'company-select' },
+    50→  { colKey: 'website', apiField: 'companyWebsiteUrl', type: 'text' },
+    51→  { colKey: 'overview', apiField: 'overview', type: 'text' },
+    52→]
+    53→
+    54→// Order of editable columns for Tab navigation
+    55→const EDITABLE_COL_ORDER = ['name', 'status', 'company', 'website', 'overview']
+    56→
+    57→// Undo/Redo history entry
+    58→interface UndoEntry {
+    59→  scenarioId: string
+    60→  apiField: EditableField
+    61→  oldValue: string
+    62→  newValue: string
+    63→  clientId?: string // for company edits
+    64→}
+    65→
+    66→function getColValue(scenario: any, key: ColFilterKey): string {
+    67→  switch (key) {
+    68→    case 'name': return scenario.name || ''
+    69→    case 'status': return scenario.status || ''
+    70→    case 'company': return scenario.company || scenario.client?.company || scenario.client?.name || ''
+    71→    case 'website': return scenario.companyWebsiteUrl || ''
+    72→    case 'overview': return scenario.overview || ''
+    73→    case 'updatedAt': return scenario.updatedAt ? new Date(scenario.updatedAt).toLocaleDateString() : ''
+    74→    case 'createdAt': return scenario.createdAt ? new Date(scenario.createdAt).toLocaleDateString() : ''
+    75→    default: return ''
+    76→  }
+    77→}
+    78→
+    79→// Get raw value for editing from a scenario object
+    80→function getEditValue(scenario: any, apiField: EditableField): string {
+    81→  if (apiField === 'companyWebsiteUrl') return scenario.companyWebsiteUrl || ''
+    82→  if (apiField === 'company') return scenario.company || scenario.client?.company || ''
+    83→  return (scenario as any)[apiField] || ''
+    84→}
+    85→
+    86→export default function DemoDashboard() {
+    87→  const { t } = useLanguage()
+    88→  const { data: session } = useSession()
+    89→  const queryClient = useQueryClient()
+    90→  const userRole = (session?.user as any)?.role
+    91→
+    92→  const [activeTab, setActiveTab] = useState<string>('form')
+    93→  const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null)
+    94→  const [previewScenarioId, setPreviewScenarioId] = useState<string | null>(null)
+    95→  const [addDialogOpen, setAddDialogOpen] = useState(false)
+    96→  const [newScenarioName, setNewScenarioName] = useState('')
+    97→
+    98→  // Filters & Sort
+    99→  const [searchQuery, setSearchQuery] = useState('')
+   100→  const [sortField, setSortField] = useState<SortField>('updatedAt')
+   101→  const [sortDir, setSortDir] = useState<SortDir>('desc')
+   102→  const [viewMode, setViewMode] = useState<'table' | 'detail'>('table')
+   103→
+   104→  // Per-column filters
+   105→  const [colFilters, setColFilters] = useState<ColFilters>(() => {
+   106→    const init: any = {}
+   107→    COL_FILTER_KEYS.forEach(k => init[k] = '')
+   108→    return init as ColFilters
+   109→  })
+   110→  const [openFilterCol, setOpenFilterCol] = useState<ColFilterKey | null>(null)
+   111→
+   112→  // Row selection
+   113→  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+   114→
+   115→  // Inline editing state
+   116→  const [editingCell, setEditingCell] = useState<{ scenarioId: string; colKey: string } | null>(null)
+   117→  const [editValue, setEditValue] = useState('')
+   118→  const editInputRef = useRef<HTMLInputElement>(null)
+   119→  // Company-select mode: 'select' (dropdown) or 'input' (type new)
+   120→  const [companyMode, setCompanyMode] = useState<'select' | 'input'>('select')
+   121→  const [newCompanyName, setNewCompanyName] = useState('')
+   122→
+   123→  // Undo/Redo stacks
+   124→  const [undoStack, setUndoStack] = useState<UndoEntry[]>([])
+   125→  const [redoStack, setRedoStack] = useState<UndoEntry[]>([])
+   126→  const [isUndoing, setIsUndoing] = useState(false)
+   127→
+   128→  // Saving cells tracking
+   129→  const [savingCells, setSavingCells] = useState<Set<string>>(new Set()) // "scenarioId:colKey"
+   130→
+   131→  // Table container ref for keyboard scrolling
+   132→  const tableContainerRef = useRef<HTMLDivElement>(null)
+   133→
+   134→  // Fetch scenarios
+   135→  const { data: scenarios = [], isLoading } = useQuery({
+   136→    queryKey: ['scenarios'],
+   137→    queryFn: async () => {
+   138→      const res = await fetch('/api/scenarios')
+   139→      if (!res.ok) throw new Error('Failed to fetch scenarios')
+   140→      return res.json()
+   141→    },
+   142→  })
+   143→
+   144→  // Filtered & sorted scenarios
+   145→  const filteredScenarios = useMemo(() => {
+   146→    let list = [...scenarios]
+   147→
+   148→    if (searchQuery) {
+   149→      const q = searchQuery.toLowerCase()
+   150→      list = list.filter((s: any) =>
+   151→        s.name?.toLowerCase().includes(q) ||
+   152→        s.overview?.toLowerCase().includes(q) ||
+   153→        s.client?.name?.toLowerCase().includes(q) ||
+   154→        s.client?.company?.toLowerCase().includes(q) ||
+   155→        s.company?.toLowerCase().includes(q) ||
+   156→        s.companyWebsiteUrl?.toLowerCase().includes(q)
+   157→      )
+   158→    }
+   159→
+   160→    for (const key of COL_FILTER_KEYS) {
+   161→      const f = colFilters[key]
+   162→      if (!f) continue
+   163→      const q = f.toLowerCase()
+   164→      list = list.filter((s: any) => getColValue(s, key).toLowerCase().includes(q))
+   165→    }
+   166→
+   167→    list.sort((a: any, b: any) => {
+   168→      let valA: any
+   169→      let valB: any
+   170→
+   171→      switch (sortField) {
+   172→        case 'name':
+   173→          valA = (a.name || '').toLowerCase()
+   174→          valB = (b.name || '').toLowerCase()
+   175→          break
+   176→        case 'status':
+   177→          valA = a.status || ''
+   178→          valB = b.status || ''
+   179→          break
+   180→        case 'company':
+   181→          valA = (a.company || a.client?.company || '').toLowerCase()
+   182→          valB = (b.company || b.client?.company || '').toLowerCase()
+   183→          break
+   184→        case 'overview':
+   185→          valA = (a.overview || '').toLowerCase()
+   186→          valB = (b.overview || '').toLowerCase()
+   187→          break
+   188→        case 'website':
+   189→          valA = (a.companyWebsiteUrl || '').toLowerCase()
+   190→          valB = (b.companyWebsiteUrl || '').toLowerCase()
+   191→          break
+   192→        case 'createdAt':
+   193→          valA = new Date(a.createdAt).getTime()
+   194→          valB = new Date(b.createdAt).getTime()
+   195→          break
+   196→        case 'updatedAt':
+   197→        default:
+   198→          valA = new Date(a.updatedAt).getTime()
+   199→          valB = new Date(b.updatedAt).getTime()
+   200→          break
+   201→      }
+   202→
+   203→      if (valA < valB) return sortDir === 'asc' ? -1 : 1
+   204→      if (valA > valB) return sortDir === 'asc' ? 1 : -1
+   205→      return 0
+   206→    })
+   207→
+   208→    return list
+   209→  }, [scenarios, searchQuery, colFilters, sortField, sortDir])
+   210→
+   211→  const currentScenario = scenarios.find((s: any) => s.id === activeScenarioId) || null
+   212→  const previewScenario = scenarios.find((s: any) => s.id === previewScenarioId) || null
+   213→
+   214→  const getUniqueColValues = useCallback((key: ColFilterKey): string[] => {
+   215→    const set = new Set<string>()
+   216→    scenarios.forEach((s: any) => {
+   217→      const v = getColValue(s, key)
+   218→      if (v) set.add(v)
+   219→    })
+   220→    return Array.from(set).sort()
+   221→  }, [scenarios])
+   222→
+   223→  const handleSort = (field: SortField) => {
+   224→    if (sortField === field) {
+   225→      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
+   226→    } else {
+   227→      setSortField(field)
+   228→      setSortDir('asc')
+   229→    }
+   230→  }
+   231→
+   232→  const SortIcon = ({ field }: { field: SortField }) => {
+   233→    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />
+   234→    return sortDir === 'asc'
+   235→      ? <ArrowUp className="h-3 w-3 ml-1 text-vivid-blue" />
+   236→      : <ArrowDown className="h-3 w-3 ml-1 text-vivid-blue" />
+   237→  }
+   238→
+   239→  const hasActiveFilter = (key: ColFilterKey) => colFilters[key] !== ''
+   240→  const anyColumnFilterActive = COL_FILTER_KEYS.some(k => colFilters[k] !== '')
+   241→
+   242→  const clearAllColumnFilters = () => {
+   243→    setColFilters(() => {
+   244→      const init: any = {}
+   245→      COL_FILTER_KEYS.forEach(k => init[k] = '')
+   246→      return init as ColFilters
+   247→    })
+   248→  }
+   249→
+   250→  // Selection helpers
+   251→  const allFilteredSelected = filteredScenarios.length > 0 && filteredScenarios.every((s: any) => selectedIds.has(s.id))
+   252→  const someFilteredSelected = filteredScenarios.some((s: any) => selectedIds.has(s.id)) && !allFilteredSelected
+   253→
+   254→  const toggleSelectAll = () => {
+   255→    if (allFilteredSelected) {
+   256→      setSelectedIds(new Set())
+   257→    } else {
+   258→      setSelectedIds(new Set(filteredScenarios.map((s: any) => s.id)))
+   259→    }
+   260→  }
+   261→
+   262→  const toggleSelectRow = (id: string) => {
+   263→    setSelectedIds(prev => {
+   264→      const next = new Set(prev)
+   265→      if (next.has(id)) next.delete(id)
+   266→      else next.add(id)
+   267→      return next
+   268→    })
+   269→  }
+   270→
+   271→  // ============ INLINE EDITING ============
+   272→
+   273→  // Check if user is admin
+   274→  const isAdmin = userRole === 'SUPER_ADMIN' || userRole === 'ADMIN'
+   275→
+   276→  const isEditable = (colKey: string) => EDITABLE_FIELDS.some(f => f.colKey === colKey)
+   277→
+   278→  // For admin: all content cells are interactive (hover + click stops propagation)
+   279→  // For non-admin: only editable fields show hover
+   280→  const isInteractiveCell = (colKey: string) => isAdmin || isEditable(colKey)
+   281→
+   282→  const getApiField = (colKey: string): EditableField | undefined =>
+   283→    EDITABLE_FIELDS.find(f => f.colKey === colKey)?.apiField
+   284→
+   285→  const getEditableType = (colKey: string): 'text' | 'select' | 'company-select' | undefined =>
+   286→    EDITABLE_FIELDS.find(f => f.colKey === colKey)?.type
+   287→
+   288→  const startEditing = (scenarioId: string, colKey: string, scenario: any) => {
+   289→    if (!isEditable(colKey)) return
+   290→    const apiField = getApiField(colKey)!
+   291→    const val = getEditValue(scenario, apiField)
+   292→    setEditingCell({ scenarioId, colKey })
+   293→    setEditValue(val)
+   294→    // Initialize company mode
+   295→    if (colKey === 'company') {
+   296→      const existingCompanies = Array.from(new Set(
+   297→        scenarios.map((s: any) => s.company || s.client?.company).filter(Boolean) as string[]
+   298→      )).sort()
+   299→      if (existingCompanies.includes(val)) {
+   300→        setCompanyMode('select')
+   301→        setNewCompanyName('')
+   302→      } else {
+   303→        setCompanyMode('input')
+   304→        setNewCompanyName(val)
+   305→      }
+   306→    }
+   307→    // Focus the input after render
+   308→    setTimeout(() => editInputRef.current?.focus(), 0)
+   309→  }
+   310→
+   311→  const cancelEditing = () => {
+   312→    setEditingCell(null)
+   313→    setEditValue('')
+   314→    setCompanyMode('select')
+   315→    setNewCompanyName('')
+   316→  }
+   317→
+   318→  const saveCell = async (scenarioId: string, colKey: string, value: string, pushToUndo = true) => {
+   319→    const apiField = getApiField(colKey)
+   320→    if (!apiField) return
+   321→
+   322→    const scenario = scenarios.find((s: any) => s.id === scenarioId)
+   323→    if (!scenario) return
+   324→
+   325→    const oldValue = getEditValue(scenario, apiField)
+   326→
+   327→    // Don't save if unchanged
+   328→    if (oldValue === value) {
+   329→      cancelEditing()
+   330→      return
+   331→    }
+   332→
+   333→    const cellKey = `${scenarioId}:${colKey}`
+   334→    setSavingCells(prev => new Set(prev).add(cellKey))
+   335→
+   336→    try {
+   337→      let ok = false
+   338→
+   339→      // Company edits go through the scenarios API (per-scenario company)
+   340→      if (apiField === 'company') {
+   341→        const res = await fetch(`/api/scenarios/${scenarioId}`, {
+   342→          method: 'PUT',
+   343→          headers: { 'Content-Type': 'application/json' },
+   344→          body: JSON.stringify({ company: value }),
+   345→        })
+   346→        ok = res.ok
+   347→      } else {
+   348→        const res = await fetch(`/api/scenarios/${scenarioId}`, {
+   349→          method: 'PUT',
+   350→          headers: { 'Content-Type': 'application/json' },
+   351→          body: JSON.stringify({ [apiField]: value }),
+   352→        })
+   353→        ok = res.ok
+   354→      }
+   355→
+   356→      if (ok) {
+   357→        toast.success('Field updated')
+   358→        if (pushToUndo) {
+   359→          setUndoStack(prev => [...prev, {
+   360→            scenarioId, apiField, oldValue, newValue: value,
+   361→          }])
+   362→          setRedoStack([])
+   363→        }
+   364→        queryClient.invalidateQueries({ queryKey: ['scenarios'] })
+   365→      } else {
+   366→        toast.error('Failed to update')
+   367→      }
+   368→    } catch (error) {
+   369→      toast.error('Failed to update')
+   370→    } finally {
+   371→      setSavingCells(prev => {
+   372→        const next = new Set(prev)
+   373→        next.delete(cellKey)
+   374→        return next
+   375→      })
+   376→      cancelEditing()
+   377→    }
+   378→  }
+   379→
+   380→  // Tab navigation: move to next editable column on same row
+   381→  const handleTabNav = (scenarioId: string, colKey: string, shiftKey: boolean) => {
+   382→    const currentIdx = EDITABLE_COL_ORDER.indexOf(colKey)
+   383→    if (currentIdx === -1) return
+   384→
+   385→    // Save current first
+   386→    const currentApiField = getApiField(colKey)
+   387→    if (currentApiField && editingCell) {
+   388→      // Save silently (no undo push since it's part of tab navigation)
+   389→      saveCell(scenarioId, colKey, editValue)
+   390→    }
+   391→
+   392→    // Find next editable column
+   393→    const direction = shiftKey ? -1 : 1
+   394→    let nextIdx = currentIdx + direction
+   395→    if (nextIdx >= EDITABLE_COL_ORDER.length) nextIdx = 0
+   396→    if (nextIdx < 0) nextIdx = EDITABLE_COL_ORDER.length - 1
+   397→
+   398→    const nextColKey = EDITABLE_COL_ORDER[nextIdx]
+   399→    if (isEditable(nextColKey)) {
+   400→      const scenario = scenarios.find((s: any) => s.id === scenarioId)
+   401→      if (scenario) {
+   402→        startEditing(scenarioId, nextColKey, scenario)
+   403→      }
+   404→    }
+   405→  }
+   406→
+   407→  // Undo: restore previous value
+   408→  const handleUndo = async () => {
+   409→    if (undoStack.length === 0) return
+   410→    setIsUndoing(true)
+   411→    const entry = undoStack[undoStack.length - 1]
+   412→
+   413→    try {
+   414→      let ok = false
+   415→      const res = await fetch(`/api/scenarios/${entry.scenarioId}`, {
+   416→        method: 'PUT',
+   417→        headers: { 'Content-Type': 'application/json' },
+   418→        body: JSON.stringify({ [entry.apiField]: entry.oldValue }),
+   419→      })
+   420→      ok = res.ok
+   421→      if (ok) {
+   422→        toast.success('Undo')
+   423→        setUndoStack(prev => prev.slice(0, -1))
+   424→        setRedoStack(prev => [...prev, entry])
+   425→        queryClient.invalidateQueries({ queryKey: ['scenarios'] })
+   426→      } else {
+   427→        toast.error('Undo failed')
+   428→      }
+   429→    } catch (error) {
+   430→      toast.error('Undo failed')
+   431→    } finally {
+   432→      setIsUndoing(false)
+   433→    }
+   434→  }
+   435→
+   436→  // Redo: re-apply undone value
+   437→  const handleRedo = async () => {
+   438→    if (redoStack.length === 0) return
+   439→    setIsUndoing(true)
+   440→    const entry = redoStack[redoStack.length - 1]
+   441→
+   442→    try {
+   443→      let ok = false
+   444→      const res = await fetch(`/api/scenarios/${entry.scenarioId}`, {
+   445→        method: 'PUT',
+   446→        headers: { 'Content-Type': 'application/json' },
+   447→        body: JSON.stringify({ [entry.apiField]: entry.newValue }),
+   448→      })
+   449→      ok = res.ok
+   450→      if (ok) {
+   451→        toast.success('Redo')
+   452→        setRedoStack(prev => prev.slice(0, -1))
+   453→        setUndoStack(prev => [...prev, entry])
+   454→        queryClient.invalidateQueries({ queryKey: ['scenarios'] })
+   455→      } else {
+   456→        toast.error('Redo failed')
+   457→      }
+   458→    } catch (error) {
+   459→      toast.error('Redo failed')
+   460→    } finally {
+   461→      setIsUndoing(false)
+   462→    }
+   463→  }
+   464→
+   465→  // ============ END INLINE EDITING ============
+   466→
+   467→  const handleAddScenario = async () => {
+   468→    if (!newScenarioName.trim()) {
+   469→      toast.error('Please enter a scenario name')
+   470→      return
+   471→    }
+   472→    try {
+   473→      const res = await fetch('/api/scenarios', {
+   474→        method: 'POST',
+   475→        headers: { 'Content-Type': 'application/json' },
+   476→        body: JSON.stringify({ name: newScenarioName, order: scenarios.length }),
+   477→      })
+   478→      if (res.ok) {
+   479→        const newScenario = await res.json()
+   480→        toast.success('Scenario added!')
+   481→        setAddDialogOpen(false)
+   482→        setNewScenarioName('')
+   483→        // Auto-open the scenario detail view
+   484→        setActiveScenarioId(newScenario.id)
+   485→        setViewMode('detail')
+   486→        setActiveTab('form')
+   487→        queryClient.invalidateQueries({ queryKey: ['scenarios'] })
+   488→      }
+   489→    } catch (error) {
+   490→      toast.error('Failed to add scenario')
+   491→    }
+   492→  }
+   493→
+   494→  const handleDeleteScenario = async (id: string) => {
+   495→    if (!confirm(t('general.confirm'))) return
+   496→    try {
+   497→      const res = await fetch(`/api/scenarios/${id}`, { method: 'DELETE' })
+   498→      if (res.ok) {
+   499→        toast.success('Scenario deleted')
+   500→        if (activeScenarioId === id) {
+   501→          setActiveScenarioId(null)
+   502→          setViewMode('table')
+   503→        }
+   504→        setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n })
+   505→        queryClient.invalidateQueries({ queryKey: ['scenarios'] })
+   506→      }
+   507→    } catch (error) {
+   508→      toast.error('Failed to delete scenario')
+   509→    }
+   510→  }
+   511→
+   512→  const openScenarioDetail = (scenario: any) => {
+   513→    setActiveScenarioId(scenario.id)
+   514→    setViewMode('detail')
+   515→    setActiveTab('form')
+   516→    setPreviewScenarioId(null)
+   517→  }
+   518→
+   519→  const openPreview = (scenario: any) => {
+   520→    setPreviewScenarioId(scenario.id)
+   521→  }
+   522→
+   523→  const backToTable = () => {
+   524→    setViewMode('table')
+   525→    setActiveScenarioId(null)
+   526→  }
+   527→
+   528→  // ============ KEYBOARD SCROLL ============
+   529→
+   530→  useEffect(() => {
+   531→    const handleKeyDown = (e: KeyboardEvent) => {
+   532→      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
+   533→      if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+   534→
+   535→      const el = tableContainerRef.current
+   536→      if (!el) return
+   537→
+   538→      const step = 60
+   539→      let handled = false
+   540→
+   541→      switch (e.key) {
+   542→        case 'ArrowUp': el.scrollTop -= step; handled = true; break
+   543→        case 'ArrowDown': el.scrollTop += step; handled = true; break
+   544→      }
+   545→
+   546→      if (handled) e.preventDefault()
+   547→    }
+   548→
+   549→    window.addEventListener('keydown', handleKeyDown)
+   550→    return () => window.removeEventListener('keydown', handleKeyDown)
+   551→  }, [])
+   552→
+   553→  // Column Header component with filter + sort
+   554→  const FilterableHeader = ({ colKey, sortFieldKey, label, className }: {
+   555→    colKey: ColFilterKey
+   556→    sortFieldKey: SortField
+   557→    label: string
+   558→    className?: string
+   559→  }) => {
+   560→    const isActive = hasActiveFilter(colKey)
+   561→    const editable = isEditable(colKey)
+   562→    return (
+   563→      <TableHead className={`select-none ${className || ''}`}>
+   564→        <div className="flex items-center gap-1">
+   565→          <button
+   566→            className="flex items-center gap-0.5 hover:text-vivid-blue transition-colors cursor-pointer"
+   567→            onClick={() => handleSort(sortFieldKey)}
+   568→          >
+   569→            <span className="text-xs font-medium">{label}</span>
+   570→            <SortIcon field={sortFieldKey} />
+   571→          </button>
+   572→
+   573→          <Popover
+   574→            open={openFilterCol === colKey}
+   575→            onOpenChange={(open) => setOpenFilterCol(open ? colKey : null)}
+   576→          >
+   577→            <PopoverTrigger asChild>
+   578→              <button
+   579→                className={`p-0.5 rounded transition-colors cursor-pointer ${
+   580→                  isActive
+   581→                    ? 'text-vivid-blue hover:text-vivid-blue/80'
+   582→                    : 'text-muted-foreground/50 hover:text-muted-foreground'
+   583→                }`}
+   584→                onClick={(e) => e.stopPropagation()}
+   585→              >
+   586→                <Filter className="h-3 w-3" />
+   587→              </button>
+   588→            </PopoverTrigger>
+   589→            <PopoverContent align="start" className="w-56 p-2">
+   590→              <div className="space-y-2">
+   591→                <div className="flex items-center justify-between">
+   592→                  <span className="text-xs font-medium">Filter: {label}</span>
+   593→                  {isActive && (
+   594→                    <button
+   595→                      className="text-[10px] text-vivid-blue hover:underline cursor-pointer"
+   596→                      onClick={() => {
+   597→                        setColFilters(prev => ({ ...prev, [colKey]: '' }))
+   598→                      }}
+   599→                    >
+   600→                      Clear
+   601→                    </button>
+   602→                  )}
+   603→                </div>
+   604→                <Input
+   605→                  placeholder="Type to filter..."
+   606→                  value={colFilters[colKey]}
+   607→                  onChange={(e) => setColFilters(prev => ({ ...prev, [colKey]: e.target.value }))}
+   608→                  className="h-7 text-xs"
+   609→                  autoFocus
+   610→                />
+   611→                {colKey === 'status' && (
+   612→                  <div className="flex flex-wrap gap-1 mt-1">
+   613→                    {getUniqueColValues(colKey).map(val => (
+   614→                      <button
+   615→                        key={val}
+   616→                        className={`text-[10px] px-1.5 py-0.5 rounded border cursor-pointer transition-colors ${
+   617→                          colFilters[colKey].toLowerCase() === val.toLowerCase()
+   618→                            ? 'bg-vivid-blue text-white border-vivid-blue'
+   619→                            : 'hover:bg-muted'
+   620→                        }`}
+   621→                        onClick={() => {
+   622→                          setColFilters(prev => ({
+   623→                            ...prev,
+   624→                            [colKey]: prev[colKey].toLowerCase() === val.toLowerCase() ? '' : val,
+   625→                          }))
+   626→                        }}
+   627→                      >
+   628→                        {val === 'submitted' ? t('dashboard.submitted') : val === 'draft' ? t('dashboard.draft') : val}
+   629→                      </button>
+   630→                    ))}
+   631→                  </div>
+   632→                )}
+   633→                {colKey !== 'status' && (
+   634→                  <div className="max-h-32 overflow-y-auto space-y-0.5">
+   635→                    {getUniqueColValues(colKey)
+   636→                      .filter(v => !colFilters[colKey] || v.toLowerCase().includes(colFilters[colKey].toLowerCase()))
+   637→                      .slice(0, 8)
+   638→                      .map(val => (
+   639→                        <button
+   640→                          key={val}
+   641→                          className="w-full text-left text-[10px] px-1.5 py-1 rounded hover:bg-muted truncate cursor-pointer transition-colors"
+   642→                          onClick={() => {
+   643→                            setColFilters(prev => ({ ...prev, [colKey]: val }))
+   644→                          }}
+   645→                        >
+   646→                          {val.length > 40 ? val.substring(0, 40) + '...' : val}
+   647→                        </button>
+   648→                      ))}
+   649→                  </div>
+   650→                )}
+   651→              </div>
+   652→            </PopoverContent>
+   653→          </Popover>
+   654→
+   655→          {/* Pencil icon for editable columns */}
+   656→          {editable && (
+   657→            <Pencil className="h-2.5 w-2.5 text-muted-foreground/30" />
+   658→          )}
+   659→        </div>
+   660→      </TableHead>
+   661→    )
+   662→  }
+   663→
+   664→  // Inline Editable Cell component
+   665→  const EditableCell = ({ scenario, colKey, children }: {
+   666→    scenario: any
+   667→    colKey: string
+   668→    children: React.ReactNode
+   669→  }) => {
+   670→    const isEditing = editingCell?.scenarioId === scenario.id && editingCell?.colKey === colKey
+   671→    const isSaving = savingCells.has(`${scenario.id}:${colKey}`)
+   672→    const editable = isEditable(colKey)
+   673→
+   674→    if (!editable) {
+   675→      // Non-editable but still interactive for admin (hover + stop propagation)
+   676→      const interactive = isInteractiveCell(colKey)
+   677→      return (
+   678→        <TableCell
+   679→          className={`relative group ${interactive ? 'cursor-default' : ''}`}
+   680→          onClick={e => e.stopPropagation()}
+   681→        >
+   682→          <span className={interactive ? 'group-hover:ring-1 group-hover:ring-vivid-blue/20 group-hover:bg-vivid-blue/5 group-hover:rounded group-hover:px-0.5 transition-all' : ''}>
+   683→            {children}
+   684→          </span>
+   685→        </TableCell>
+   686→      )
+   687→    }
+   688→
+   689→    if (isEditing) {
+   690→      const editType = getEditableType(colKey)
+   691→
+   692→      // Common save/cancel button handlers using onMouseDown to prevent blur race
+   693→      const handleSave = (e: React.MouseEvent) => {
+   694→        e.preventDefault() // prevent input blur
+   695→        e.stopPropagation()
+   696→        saveCell(scenario.id, colKey, editValue)
+   697→      }
+   698→      const handleCancel = (e: React.MouseEvent) => {
+   699→        e.preventDefault()
+   700→        e.stopPropagation()
+   701→        cancelEditing()
+   702→      }
+   703→
+   704→      // Company select: native <select> dropdown with existing companies + "Add new" option
+   705→      if (editType === 'company-select') {
+   706→        const existingCompanies = Array.from(new Set(
+   707→          scenarios.map((s: any) => s.company || s.client?.company).filter(Boolean) as string[]
+   708→        )).sort()
+   709→
+   710→        const selectedInDropdown = existingCompanies.includes(editValue) ? editValue : ''
+   711→
+   712→        // When user picks from dropdown
+   713→        const handleSelectChange = (val: string) => {
+   714→          if (val === '__ADD_NEW__') {
+   715→            setCompanyMode('input')
+   716→            setNewCompanyName('')
+   717→            // Focus the text input after render
+   718→            setTimeout(() => editInputRef.current?.focus(), 0)
+   719→          } else {
+   720→            setEditValue(val)
+   721→          }
+   722→        }
+   723→
+   724→        // When user types a new company name
+   725→        const handleNewCompanyConfirm = () => {
+   726→          if (newCompanyName.trim()) {
+   727→            saveCell(scenario.id, colKey, newCompanyName.trim())
+   728→          } else {
+   729→            cancelEditing()
+   730→          }
+   731→        }
+   732→
+   733→        // SELECT MODE: native dropdown
+   734→        if (companyMode === 'select') {
+   735→          return (
+   736→            <TableCell onClick={e => e.stopPropagation()}>
+   737→              <div className="flex items-center gap-1">
+   738→                <select
+   739→                  ref={editInputRef as any}
+   740→                  value={selectedInDropdown}
+   741→                  onChange={e => handleSelectChange(e.target.value)}
+   742→                  onKeyDown={e => {
+   743→                    if (e.key === 'Enter') {
+   744→                      e.preventDefault()
+   745→                      if (editValue) saveCell(scenario.id, colKey, editValue)
+   746→                    }
+   747→                    if (e.key === 'Escape') cancelEditing()
+   748→                    if (e.key === 'Tab') {
+   749→                      e.preventDefault()
+   750→                      handleTabNav(scenario.id, colKey, e.shiftKey)
+   751→                    }
+   752→                  }}
+   753→                  className="h-7 text-xs border border-vivid-blue rounded px-1 bg-white focus:outline-none focus:ring-1 focus:ring-vivid-blue flex-1 cursor-pointer"
+   754→                  autoFocus
+   755→                >
+   756→                  <option value="" disabled>Select a company...</option>
+   757→                  {existingCompanies.map(c => (
+   758→                    <option key={c} value={c}>{c}</option>
+   759→                  ))}
+   760→                  <option value="__ADD_NEW__">+ Add New Company</option>
+   761→                </select>
+   762→                <button
+   763→                  className="flex items-center justify-center h-7 w-7 rounded hover:bg-emerald/10 text-emerald cursor-pointer shrink-0 border border-transparent hover:border-emerald/20 transition-colors"
+   764→                  onMouseDown={handleSave}
+   765→                  title="Save (Enter)"
+   766→                >
+   767→                  <Check className="h-4 w-4" />
+   768→                </button>
+   769→                <button
+   770→                  className="flex items-center justify-center h-7 w-7 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 cursor-pointer shrink-0 border border-transparent hover:border-red-200 transition-colors"
+   771→                  onMouseDown={handleCancel}
+   772→                  title="Cancel (Esc)"
+   773→                >
+   774→                  <X className="h-4 w-4" />
+   775→                </button>
+   776→              </div>
+   777→            </TableCell>
+   778→          )
+   779→        }
+   780→
+   781→        // INPUT MODE: type a new company name
+   782→        return (
+   783→          <TableCell onClick={e => e.stopPropagation()}>
+   784→            <div className="flex items-center gap-1">
+   785→              <Input
+   786→                ref={editInputRef}
+   787→                value={newCompanyName}
+   788→                onChange={e => setNewCompanyName(e.target.value)}
+   789→                onKeyDown={e => {
+   790→                  if (e.key === 'Enter') {
+   791→                    e.preventDefault()
+   792→                    handleNewCompanyConfirm()
+   793→                  }
+   794→                  if (e.key === 'Escape') cancelEditing()
+   795→                  if (e.key === 'Tab') {
+   796→                    e.preventDefault()
+   797→                    handleTabNav(scenario.id, colKey, e.shiftKey)
+   798→                  }
+   799→                }}
+   800→                className="h-7 text-xs border-vivid-blue focus:ring-1 focus:ring-vivid-blue flex-1"
+   801→                autoFocus
+   802→                placeholder="Type new company name..."
+   803→              />
+   804→              <button
+   805→                className="flex items-center justify-center h-7 w-7 rounded hover:bg-muted text-muted-foreground cursor-pointer shrink-0 border border-transparent hover:border-muted-foreground/20 transition-colors"
+   806→                onMouseDown={(e) => {
+   807→                  e.preventDefault()
+   808→                  e.stopPropagation()
+   809→                  setCompanyMode('select')
+   810→                }}
+   811→                title="Back to list"
+   812→              >
+   813→                <Undo2 className="h-3.5 w-3.5" />
+   814→              </button>
+   815→              <button
+   816→                className="flex items-center justify-center h-7 w-7 rounded hover:bg-emerald/10 text-emerald cursor-pointer shrink-0 border border-transparent hover:border-emerald/20 transition-colors"
+   817→                onMouseDown={(e) => {
+   818→                  e.preventDefault()
+   819→                  e.stopPropagation()
+   820→                  handleNewCompanyConfirm()
+   821→                }}
+   822→                title="Save (Enter)"
+   823→              >
+   824→                <Check className="h-4 w-4" />
+   825→              </button>
+   826→              <button
+   827→                className="flex items-center justify-center h-7 w-7 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 cursor-pointer shrink-0 border border-transparent hover:border-red-200 transition-colors"
+   828→                onMouseDown={handleCancel}
+   829→                title="Cancel (Esc)"
+   830→              >
+   831→                <X className="h-4 w-4" />
+   832→              </button>
+   833→            </div>
+   834→          </TableCell>
+   835→        )
+   836→      }
+   837→
+   838→      // Status select
+   839→      if (editType === 'select' && colKey === 'status') {
+   840→        return (
+   841→          <TableCell onClick={e => e.stopPropagation()}>
+   842→            <div className="flex items-center gap-1">
+   843→              <select
+   844→                ref={editInputRef as any}
+   845→                value={editValue}
+   846→                onChange={e => setEditValue(e.target.value)}
+   847→                onKeyDown={e => {
+   848→                  if (e.key === 'Enter') {
+   849→                    e.preventDefault()
+   850→                    saveCell(scenario.id, colKey, editValue)
+   851→                  }
+   852→                  if (e.key === 'Escape') cancelEditing()
+   853→                  if (e.key === 'Tab') {
+   854→                    e.preventDefault()
+   855→                    handleTabNav(scenario.id, colKey, e.shiftKey)
+   856→                  }
+   857→                }}
+   858→                className="h-7 text-xs border border-vivid-blue rounded px-1 bg-white focus:outline-none focus:ring-1 focus:ring-vivid-blue"
+   859→                autoFocus
+   860→              >
+   861→                <option value="draft">Draft</option>
+   862→                <option value="submitted">Submitted</option>
+   863→              </select>
+   864→              <button
+   865→                className="flex items-center justify-center h-7 w-7 rounded hover:bg-emerald/10 text-emerald cursor-pointer shrink-0 border border-transparent hover:border-emerald/20 transition-colors"
+   866→                onMouseDown={handleSave}
+   867→                title="Save"
+   868→              >
+   869→                <Check className="h-4 w-4" />
+   870→              </button>
+   871→              <button
+   872→                className="flex items-center justify-center h-7 w-7 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 cursor-pointer shrink-0 border border-transparent hover:border-red-200 transition-colors"
+   873→                onMouseDown={handleCancel}
+   874→                title="Cancel"
+   875→              >
+   876→                <X className="h-4 w-4" />
+   877→              </button>
+   878→            </div>
+   879→          </TableCell>
+   880→        )
+   881→      }
+   882→
+   883→      // Text input (name, website, overview)
+   884→      return (
+   885→        <TableCell onClick={e => e.stopPropagation()}>
+   886→          <div className="flex items-center gap-1">
+   887→            <Input
+   888→              ref={editInputRef}
+   889→              value={editValue}
+   890→              onChange={e => setEditValue(e.target.value)}
+   891→              onKeyDown={e => {
+   892→                if (e.key === 'Enter') {
+   893→                  e.preventDefault()
+   894→                  saveCell(scenario.id, colKey, editValue)
+   895→                }
+   896→                if (e.key === 'Escape') cancelEditing()
+   897→                if (e.key === 'Tab') {
+   898→                  e.preventDefault()
+   899→                  handleTabNav(scenario.id, colKey, e.shiftKey)
+   900→                }
+   901→              }}
+   902→              className="h-7 text-xs border-vivid-blue focus:ring-1 focus:ring-vivid-blue"
+   903→              autoFocus
+   904→            />
+   905→            <button
+   906→              className="flex items-center justify-center h-7 w-7 rounded hover:bg-emerald/10 text-emerald cursor-pointer shrink-0 border border-transparent hover:border-emerald/20 transition-colors"
+   907→              onMouseDown={handleSave}
+   908→              title="Save (Enter)"
+   909→            >
+   910→              <Check className="h-4 w-4" />
+   911→            </button>
+   912→            <button
+   913→              className="flex items-center justify-center h-7 w-7 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 cursor-pointer shrink-0 border border-transparent hover:border-red-200 transition-colors"
+   914→              onMouseDown={handleCancel}
+   915→              title="Cancel (Esc)"
+   916→            >
+   917→              <X className="h-4 w-4" />
+   918→            </button>
+   919→          </div>
+   920→        </TableCell>
+   921→      )
+   922→    }
+   923→
+   924→    // Non-editing mode: single click to edit, hover shows highlight
+   925→    const interactive = isInteractiveCell(colKey)
+   926→    return (
+   927→      <TableCell
+   928→        className={`relative group ${interactive ? 'cursor-text' : ''}`}
+   929→        onClick={(e) => {
+   930→          e.stopPropagation() // Always stop — never let row click open scenario
+   931→          if (editable) startEditing(scenario.id, colKey, scenario)
+   932→        }}
+   933→      >
+   934→        <div className="flex items-center gap-1">
+   935→          {isSaving ? (
+   936→            <Loader2 className="h-3 w-3 animate-spin text-vivid-blue" />
+   937→          ) : null}
+   938→          <span className={interactive ? 'group-hover:ring-1 group-hover:ring-vivid-blue/30 group-hover:bg-vivid-blue/5 group-hover:rounded group-hover:px-0.5 transition-all' : ''}>
+   939→            {children}
+   940→          </span>
+   941→        </div>
+   942→      </TableCell>
+   943→    )
+   944→  }
+   945→
+   946→  if (isLoading) {
+   947→    return (
+   948→      <div className="flex items-center justify-center h-64">
+   949→        <Loader2 className="h-8 w-8 animate-spin text-vivid-blue" />
+   950→      </div>
+   951→    )
+   952→  }
+   953→
+   954→  if (scenarios.length === 0) {
+   955→    return (
+   956→      <div className="text-center py-12">
+   957→        <p className="text-muted-foreground mb-4">{t('general.noData')}</p>
+   958→        <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+   959→          <DialogTrigger asChild>
+   960→            <Button className="bg-vivid-blue hover:bg-blue-700">
+   961→              <Plus className="h-4 w-4 mr-1" />
+   962→              {t('dashboard.addScenario')}
+   963→            </Button>
+   964→          </DialogTrigger>
+   965→          <DialogContent>
+   966→            <DialogHeader>
+   967→              <DialogTitle>{t('dashboard.addScenario')}</DialogTitle>
+   968→            </DialogHeader>
+   969→            <div className="space-y-3 pt-2">
+   970→              <Input
+   971→                value={newScenarioName}
+   972→                onChange={e => setNewScenarioName(e.target.value)}
+   973→                placeholder={t('setup.scenarioName')}
+   974→                onKeyDown={e => e.key === 'Enter' && handleAddScenario()}
+   975→              />
+   976→              <Button onClick={handleAddScenario} className="w-full bg-vivid-blue hover:bg-blue-700">
+   977→                {t('general.add')}
+   978→              </Button>
+   979→            </div>
+   980→          </DialogContent>
+   981→        </Dialog>
+   982→      </div>
+   983→    )
+   984→  }
+   985→
+   986→  // =====================
+   987→  // DETAIL VIEW
+   988→  // =====================
+   989→  if (viewMode === 'detail' && currentScenario) {
+   990→    return (
+   991→      <div className="space-y-4">
+   992→        <div className="flex items-center gap-3 flex-wrap">
+   993→          <Button variant="outline" size="sm" onClick={backToTable}>
+   994→            ← {t('dashboard.backToTable')}
+   995→          </Button>
+   996→
+   997→          <Popover>
+   998→            <PopoverTrigger asChild>
+   999→              <Button variant="outline" size="sm" className="w-64 justify-start">
+  1000→                {currentScenario.name}
+  1001→                <Badge
+  1002→                  variant={currentScenario.status === 'submitted' ? 'default' : 'secondary'}
+  1003→                  className={`text-[9px] px-1 py-0 ml-2 ${currentScenario.status === 'submitted' ? 'bg-emerald text-white' : ''}`}
+  1004→                >
+  1005→                  {currentScenario.status === 'submitted' ? t('dashboard.submitted') : t('dashboard.draft')}
+  1006→                </Badge>
+  1007→              </Button>
+  1008→            </PopoverTrigger>
+  1009→            <PopoverContent className="w-64 p-1 max-h-60 overflow-y-auto">
+  1010→              {scenarios.map((s: any) => (
+  1011→                <button
+  1012→                  key={s.id}
+  1013→                  className={`w-full text-left px-2 py-1.5 rounded text-sm flex items-center gap-2 cursor-pointer transition-colors ${
+  1014→                    s.id === currentScenario.id ? 'bg-vivid-blue/10 text-vivid-blue' : 'hover:bg-muted'
+  1015→                  }`}
+  1016→                  onClick={() => { setActiveScenarioId(s.id); setActiveTab('form') }}
+  1017→                >
+  1018→                  <span className="truncate">{s.name}</span>
+  1019→                  <Badge
+  1020→                    variant={s.status === 'submitted' ? 'default' : 'secondary'}
+  1021→                    className={`text-[9px] px-1 py-0 ml-auto shrink-0 ${s.status === 'submitted' ? 'bg-emerald text-white' : ''}`}
+  1022→                  >
+  1023→                    {s.status === 'submitted' ? t('dashboard.submitted') : t('dashboard.draft')}
+  1024→                  </Badge>
+  1025→                </button>
+  1026→              ))}
+  1027→            </PopoverContent>
+  1028→          </Popover>
+  1029→
+  1030→          <div className="flex items-center gap-1 ml-auto">
+  1031→            <Button
+  1032→              variant="outline"
+  1033→              size="sm"
+  1034→              onClick={async () => {
+  1035→                try {
+  1036→                  const res = await fetch(`/api/scenarios/${currentScenario.id}/pdf`)
+  1037→                  if (!res.ok) {
+  1038→                    toast.error('Failed to generate PDF')
+  1039→                    return
+  1040→                  }
+  1041→                  const blob = await res.blob()
+  1042→                  const url = URL.createObjectURL(blob)
+  1043→                  const a = document.createElement('a')
+  1044→                  a.href = url
+  1045→                  a.download = `MassaPro-Demo-Form-${currentScenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
+  1046→                  document.body.appendChild(a)
+  1047→                  a.click()
+  1048→                  document.body.removeChild(a)
+  1049→                  URL.revokeObjectURL(url)
+  1050→                  toast.success('PDF downloaded!')
+  1051→                } catch (error) {
+  1052→                  toast.error('Failed to generate PDF')
+  1053→                }
+  1054→              }}
+  1055→              title="Download PDF"
+  1056→              className="border-purple-300 text-purple-700 hover:bg-purple-50"
+  1057→            >
+  1058→              <Download className="h-3.5 w-3.5 mr-1" />
+  1059→              PDF
+  1060→            </Button>
+  1061→            <Button variant="ghost" size="sm" onClick={async () => {
+  1062→              const newName = prompt('New name:', currentScenario.name)
+  1063→              if (newName && newName.trim()) {
+  1064→                await fetch(`/api/scenarios/${currentScenario.id}`, {
+  1065→                  method: 'PUT',
+  1066→                  headers: { 'Content-Type': 'application/json' },
+  1067→                  body: JSON.stringify({ name: newName.trim() }),
+  1068→                })
+  1069→                queryClient.invalidateQueries({ queryKey: ['scenarios'] })
+  1070→                toast.success('Renamed')
+  1071→              }
+  1072→            }} title="Rename">
+  1073→              <Pencil className="h-3.5 w-3.5" />
+  1074→            </Button>
+  1075→            <Button
+  1076→              variant="ghost"
+  1077→              size="sm"
+  1078→              className="text-destructive hover:text-destructive"
+  1079→              onClick={() => handleDeleteScenario(currentScenario.id)}
+  1080→              title="Delete"
+  1081→            >
+  1082→              <Trash2 className="h-3.5 w-3.5" />
+  1083→            </Button>
+  1084→          </div>
+  1085→        </div>
+  1086→
+  1087→        <Tabs value={activeTab} onValueChange={setActiveTab}>
+  1088→          <TabsList className="grid w-full grid-cols-7">
+  1089→            <TabsTrigger value="form" className="text-xs sm:text-sm">Form</TabsTrigger>
+  1090→            <TabsTrigger value="collaborators" className="text-xs sm:text-sm">{t('tab.collaborators')}</TabsTrigger>
+  1091→            <TabsTrigger value="comments" className="text-xs sm:text-sm">{t('tab.comments')}</TabsTrigger>
+  1092→            <TabsTrigger value="changelog" className="text-xs sm:text-sm">{t('tab.changeHistory')}</TabsTrigger>
+  1093→            <TabsTrigger value="notes" className="text-xs sm:text-sm">{t('tab.adminNotes')}</TabsTrigger>
+  1094→            <TabsTrigger value="translate" className="text-xs sm:text-sm">{t('translate.title')}</TabsTrigger>
+  1095→            <TabsTrigger value="export" className="text-xs sm:text-sm">
+  1096→              <Download className="h-3 w-3 mr-1" />
+  1097→              {t('admin.export')}
+  1098→            </TabsTrigger>
+  1099→          </TabsList>
+  1100→
+  1101→          <TabsContent value="form" className="mt-4">
+  1102→            <ScenarioForm scenario={currentScenario} userRole={userRole} />
+  1103→          </TabsContent>
+  1104→          <TabsContent value="collaborators" className="mt-4">
+  1105→            <CollaboratorPanel scenarioId={currentScenario.id} />
+  1106→          </TabsContent>
+  1107→          <TabsContent value="comments" className="mt-4">
+  1108→            <CommentsPanel scenarioId={currentScenario.id} />
+  1109→          </TabsContent>
+  1110→          <TabsContent value="changelog" className="mt-4">
+  1111→            <ChangeLogPanel scenarioId={currentScenario.id} />
+  1112→          </TabsContent>
+  1113→          <TabsContent value="notes" className="mt-4">
+  1114→            <AdminNotesPanel scenarioId={currentScenario.id} />
+  1115→          </TabsContent>
+  1116→          <TabsContent value="translate" className="mt-4">
+  1117→            <TranslationPanel scenarioId={currentScenario.id} scenario={currentScenario} />
+  1118→          </TabsContent>
+  1119→          <TabsContent value="export" className="mt-4">
+  1120→            <ScenarioExport scenarioId={currentScenario.id} scenarioName={currentScenario.name} />
+  1121→          </TabsContent>
+  1122→        </Tabs>
+  1123→      </div>
+  1124→    )
+  1125→  }
+  1126→
+  1127→  // =====================
+  1128→  // TABLE VIEW (default)
+  1129→  // =====================
+  1130→
+  1131→  return (
+  1132→    <div className="space-y-3">
+  1133→      {/* Table styles - fixed layout so columns fit viewport */}
+  1134→      <style>{`
+  1135→        .mp-fit-table { table-layout: fixed; width: 100%; }
+  1136→        .mp-fit-table td, .mp-fit-table th { overflow: hidden; word-wrap: break-word; overflow-wrap: break-word; }
+  1137→      `}</style>
+  1138→
+  1139→      {/* Toolbar: Search, Undo/Redo, Add */}
+  1140→      <Card>
+  1141→        <CardContent className="pt-4 pb-4">
+  1142→          <div className="flex items-center gap-3 flex-wrap">
+  1143→            <div className="relative flex-1 min-w-[200px]">
+  1144→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+  1145→              <Input
+  1146→                placeholder={t('general.search')}
+  1147→                value={searchQuery}
+  1148→                onChange={e => setSearchQuery(e.target.value)}
+  1149→                className="pl-9"
+  1150→              />
+  1151→            </div>
+  1152→
+  1153→            {/* Undo / Redo */}
+  1154→            <div className="flex items-center gap-0.5 border rounded-md p-0.5">
+  1155→              <Button
+  1156→                variant="ghost"
+  1157→                size="sm"
+  1158→                className="h-7 w-7 p-0"
+  1159→                disabled={undoStack.length === 0 || isUndoing}
+  1160→                onClick={handleUndo}
+  1161→                title="Undo (last field edit)"
+  1162→              >
+  1163→                <Undo2 className="h-3.5 w-3.5" />
+  1164→              </Button>
+  1165→              <Button
+  1166→                variant="ghost"
+  1167→                size="sm"
+  1168→                className="h-7 w-7 p-0"
+  1169→                disabled={redoStack.length === 0 || isUndoing}
+  1170→                onClick={handleRedo}
+  1171→                title="Redo"
+  1172→              >
+  1173→                <Redo2 className="h-3.5 w-3.5" />
+  1174→              </Button>
+  1175→              {(undoStack.length > 0 || redoStack.length > 0) && (
+  1176→                <span className="text-[10px] text-muted-foreground px-1">
+  1177→                  {undoStack.length > 0 ? `${undoStack.length}` : '0'}
+  1178→                </span>
+  1179→              )}
+  1180→            </div>
+  1181→
+  1182→            {/* Selected count + bulk actions */}
+  1183→            {selectedIds.size > 0 && (
+  1184→              <div className="flex items-center gap-2">
+  1185→                <Badge variant="secondary" className="text-xs">
+  1186→                  {selectedIds.size} selected
+  1187→                </Badge>
+  1188→                <Button
+  1189→                  variant="ghost"
+  1190→                  size="sm"
+  1191→                  className="text-destructive hover:text-destructive h-7"
+  1192→                  onClick={async () => {
+  1193→                    if (!confirm(`Delete ${selectedIds.size} scenario(s)?`)) return
+  1194→                    for (const id of selectedIds) {
+  1195→                      await fetch(`/api/scenarios/${id}`, { method: 'DELETE' })
+  1196→                    }
+  1197→                    toast.success(`${selectedIds.size} scenario(s) deleted`)
+  1198→                    setSelectedIds(new Set())
+  1199→                    queryClient.invalidateQueries({ queryKey: ['scenarios'] })
+  1200→                  }}
+  1201→                >
+  1202→                  <Trash2 className="h-3.5 w-3.5 mr-1" />
+  1203→                  Delete
+  1204→                </Button>
+  1205→                <Button
+  1206→                  variant="ghost"
+  1207→                  size="sm"
+  1208→                  className="h-7"
+  1209→                  onClick={() => setSelectedIds(new Set())}
+  1210→                >
+  1211→                  Clear
+  1212→                </Button>
+  1213→              </div>
+  1214→            )}
+  1215→
+  1216→            {/* Clear all column filters */}
+  1217→            {anyColumnFilterActive && (
+  1218→              <Button variant="ghost" size="sm" onClick={clearAllColumnFilters} className="h-7 text-xs">
+  1219→                <X className="h-3 w-3 mr-1" />
+  1220→                Clear filters
+  1221→              </Button>
+  1222→            )}
+  1223→
+  1224→            <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+  1225→              <DialogTrigger asChild>
+  1226→                <Button className="bg-vivid-blue hover:bg-blue-700">
+  1227→                  <Plus className="h-4 w-4 mr-1" />
+  1228→                  {t('dashboard.addScenario')}
+  1229→                </Button>
+  1230→              </DialogTrigger>
+  1231→              <DialogContent>
+  1232→                <DialogHeader>
+  1233→                  <DialogTitle>{t('dashboard.addScenario')}</DialogTitle>
+  1234→                </DialogHeader>
+  1235→                <div className="space-y-3 pt-2">
+  1236→                  <Input
+  1237→                    value={newScenarioName}
+  1238→                    onChange={e => setNewScenarioName(e.target.value)}
+  1239→                    placeholder={t('setup.scenarioName')}
+  1240→                    onKeyDown={e => e.key === 'Enter' && handleAddScenario()}
+  1241→                  />
+  1242→                  <Button onClick={handleAddScenario} className="w-full bg-vivid-blue hover:bg-blue-700">
+  1243→                    {t('general.add')}
+  1244→                  </Button>
+  1245→                </div>
+  1246→              </DialogContent>
+  1247→            </Dialog>
+  1248→          </div>
+  1249→        </CardContent>
+  1250→      </Card>
+  1251→
+  1252→      {/* Scenario count + hints */}
+  1253→      <div className="flex items-center justify-between">
+  1254→        <p className="text-sm text-muted-foreground">
+  1255→          {filteredScenarios.length} of {scenarios.length} {t('dashboard.scenarios')}
+  1256→          {selectedIds.size > 0 && (
+  1257→            <span className="ml-2 text-vivid-blue">({selectedIds.size} selected)</span>
+  1258→          )}
+  1259→        </p>
+  1260→        <div className="flex items-center gap-3">
+  1261→          <p className="text-xs text-muted-foreground">
+  1262→            Click to edit · <kbd className="px-1 py-0.5 bg-muted rounded text-[10px] border">Tab</kbd> next field · <kbd className="px-1 py-0.5 bg-muted rounded text-[10px] border">Enter</kbd> save
+  1263→          </p>
+  1264→        </div>
+  1265→      </div>
+  1266→
+  1267→      {/* Table - all columns fit within viewport, no horizontal scroll */}
+  1268→      {filteredScenarios.length === 0 ? (
+  1269→        <div className="text-center py-12">
+  1270→          <p className="text-muted-foreground">{t('general.noData')}</p>
+  1271→        </div>
+  1272→      ) : (
+  1273→        <div
+  1274→          ref={tableContainerRef}
+  1275→          className="overflow-y-auto overflow-x-hidden border rounded-lg"
+  1276→          style={{ maxHeight: 'calc(100vh - 260px)' }}
+  1277→        >
+  1278→            <Table className="mp-fit-table">
+  1279→              <TableHeader>
+  1280→                <TableRow className="bg-muted/50 sticky top-0 z-10">
+  1281→                  <TableHead className="w-[36px] px-1">
+  1282→                    <Checkbox
+  1283→                      checked={allFilteredSelected ? true : someFilteredSelected ? 'indeterminate' : false}
+  1284→                      onCheckedChange={toggleSelectAll}
+  1285→                      aria-label="Select all"
+  1286→                    />
+  1287→                  </TableHead>
+  1288→
+  1289→                  <FilterableHeader colKey="name" sortFieldKey="name" label={t('dashboard.colName')} className="w-[20%]" />
+  1290→                  <FilterableHeader colKey="status" sortFieldKey="status" label={t('dashboard.colStatus')} className="w-[8%]" />
+  1291→                  <FilterableHeader colKey="company" sortFieldKey="company" label={t('dashboard.colCompany')} className="w-[16%]" />
+  1292→                  <FilterableHeader colKey="website" sortFieldKey="website" label={t('dashboard.colWebsite')} className="w-[16%]" />
+  1293→                  <FilterableHeader colKey="overview" sortFieldKey="overview" label={t('dashboard.colOverview')} className="w-[22%]" />
+  1294→                  <FilterableHeader colKey="updatedAt" sortFieldKey="updatedAt" label={t('dashboard.colUpdated')} className="w-[8%]" />
+  1295→                  <FilterableHeader colKey="createdAt" sortFieldKey="createdAt" label={t('dashboard.colCreated')} className="w-[8%]" />
+  1296→                  <TableHead className="text-right w-[6%]">{t('dashboard.colActions')}</TableHead>
+  1297→                </TableRow>
+  1298→              </TableHeader>
+  1299→              <TableBody>
+  1300→                {filteredScenarios.map((scenario: any) => {
+  1301→                  const isRowEditing = editingCell?.scenarioId === scenario.id
+  1302→
+  1303→                  return (
+  1304→                    <TableRow
+  1305→                      key={scenario.id}
+  1306→                      className={`transition-colors ${
+  1307→                        isRowEditing
+  1308→                          ? 'bg-vivid-blue/5'
+  1309→                          : selectedIds.has(scenario.id)
+  1310→                            ? 'bg-vivid-blue/8 hover:bg-vivid-blue/12'
+  1311→                            : 'hover:bg-vivid-blue/5'
+  1312→                      }`}
+  1313→                    >
+  1314→                      {/* Checkbox */}
+  1315→                      <TableCell className="px-2" onClick={e => e.stopPropagation()}>
+  1316→                        <Checkbox
+  1317→                          checked={selectedIds.has(scenario.id)}
+  1318→                          onCheckedChange={() => toggleSelectRow(scenario.id)}
+  1319→                          aria-label={`Select ${scenario.name}`}
+  1320→                        />
+  1321→                      </TableCell>
+  1322→
+  1323→                      {/* Name - editable with preview link */}
+  1324→                      <EditableCell scenario={scenario} colKey="name">
+  1325→                        <span className="font-medium text-sm break-words flex items-center gap-1">
+  1326→                          <span
+  1327→                            className="text-vivid-blue hover:underline cursor-pointer"
+  1328→                            onClick={(e) => {
+  1329→                              e.stopPropagation()
+  1330→                              openPreview(scenario)
+  1331→                            }}
+  1332→                            title="Preview scenario"
+  1333→                          >
+  1334→                            {scenario.name}
+  1335→                          </span>
+  1336→                        </span>
+  1337→                      </EditableCell>
+  1338→
+  1339→                      {/* Status - editable (select) */}
+  1340→                      <EditableCell scenario={scenario} colKey="status">
+  1341→                        <Badge
+  1342→                          variant={scenario.status === 'submitted' ? 'default' : 'secondary'}
+  1343→                          className={`text-xs ${scenario.status === 'submitted' ? 'bg-emerald text-white' : ''}`}
+  1344→                        >
+  1345→                          {scenario.status === 'submitted' ? t('dashboard.submitted') : t('dashboard.draft')}
+  1346→                        </Badge>
+  1347→                      </EditableCell>
+  1348→
+  1349→                      {/* Company - editable (company select with existing + add new) */}
+  1350→                      <EditableCell scenario={scenario} colKey="company">
+  1351→                        <span className="text-sm text-muted-foreground break-words">
+  1352→                          {scenario.company || scenario.client?.company || scenario.client?.name || '—'}
+  1353→                        </span>
+  1354→                      </EditableCell>
+  1355→
+  1356→                      {/* Website - editable */}
+  1357→                      <EditableCell scenario={scenario} colKey="website">
+  1358→                        <span className="text-xs text-muted-foreground break-all">
+  1359→                          {scenario.companyWebsiteUrl ? scenario.companyWebsiteUrl.replace(/^https?:\/\//, '') : '—'}
+  1360→                        </span>
+  1361→                      </EditableCell>
+  1362→
+  1363→                      {/* Overview - editable */}
+  1364→                      <EditableCell scenario={scenario} colKey="overview">
+  1365→                        <span className="text-xs text-muted-foreground break-words">
+  1366→                          {scenario.overview || '—'}
+  1367→                        </span>
+  1368→                      </EditableCell>
+  1369→
+  1370→                      {/* Updated - visual hover for admin, stops propagation */}
+  1371→                      <TableCell
+  1372→                        className={`relative group ${isAdmin ? 'cursor-default' : ''}`}
+  1373→                        onClick={e => e.stopPropagation()}
+  1374→                      >
+  1375→                        <span className={`text-xs text-muted-foreground ${isAdmin ? 'group-hover:ring-1 group-hover:ring-vivid-blue/20 group-hover:bg-vivid-blue/5 group-hover:rounded group-hover:px-0.5 transition-all' : ''}`}>
+  1376→                          {new Date(scenario.updatedAt).toLocaleDateString()}
+  1377→                        </span>
+  1378→                      </TableCell>
+  1379→
+  1380→                      {/* Created - visual hover for admin, stops propagation */}
+  1381→                      <TableCell
+  1382→                        className={`relative group ${isAdmin ? 'cursor-default' : ''}`}
+  1383→                        onClick={e => e.stopPropagation()}
+  1384→                      >
+  1385→                        <span className={`text-xs text-muted-foreground ${isAdmin ? 'group-hover:ring-1 group-hover:ring-vivid-blue/20 group-hover:bg-vivid-blue/5 group-hover:rounded group-hover:px-0.5 transition-all' : ''}`}>
+  1386→                          {new Date(scenario.createdAt).toLocaleDateString()}
+  1387→                        </span>
+  1388→                      </TableCell>
+  1389→
+  1390→                      {/* Actions */}
+  1391→                      <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+  1392→                        <div className="flex items-center justify-end gap-0.5">
+  1393→                          <Button
+  1394→                            variant="ghost"
+  1395→                            size="sm"
+  1396→                            onClick={() => openPreview(scenario)}
+  1397→                            title="Preview"
+  1398→                          >
+  1399→                            <Eye className="h-4 w-4" />
+  1400→                          </Button>
+  1401→                          <Button
+  1402→                            variant="ghost"
+  1403→                            size="sm"
+  1404→                            onClick={async () => {
+  1405→                              try {
+  1406→                                const res = await fetch(`/api/scenarios/${scenario.id}/pdf`)
+  1407→                                if (!res.ok) {
+  1408→                                  toast.error('Failed to generate PDF')
+  1409→                                  return
+  1410→                                }
+  1411→                                const blob = await res.blob()
+  1412→                                const url = URL.createObjectURL(blob)
+  1413→                                const a = document.createElement('a')
+  1414→                                a.href = url
+  1415→                                a.download = `MassaPro-Demo-Form-${scenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
+  1416→                                document.body.appendChild(a)
+  1417→                                a.click()
+  1418→                                document.body.removeChild(a)
+  1419→                                URL.revokeObjectURL(url)
+  1420→                                toast.success('PDF downloaded!')
+  1421→                              } catch (error) {
+  1422→                                toast.error('Failed to generate PDF')
+  1423→                              }
+  1424→                            }}
+  1425→                            title="Download PDF"
+  1426→                            className="text-purple-600 hover:text-purple-800 hover:bg-purple-50"
+  1427→                          >
+  1428→                            <FileDown className="h-4 w-4" />
+  1429→                          </Button>
+  1430→                          <Button
+  1431→                            variant="ghost"
+  1432→                            size="sm"
+  1433→                            onClick={() => startEditing(scenario.id, 'name', scenario)}
+  1434→                            title="Rename"
+  1435→                          >
+  1436→                            <Pencil className="h-3.5 w-3.5" />
+  1437→                          </Button>
+  1438→                          <Button
+  1439→                            variant="ghost"
+  1440→                            size="sm"
+  1441→                            className="text-destructive hover:text-destructive"
+  1442→                            onClick={() => handleDeleteScenario(scenario.id)}
+  1443→                            title="Delete"
+  1444→                          >
+  1445→                            <Trash2 className="h-3.5 w-3.5" />
+  1446→                          </Button>
+  1447→                        </div>
+  1448→                      </TableCell>
+  1449→                    </TableRow>
+  1450→                  )
+  1451→                })}
+  1452→              </TableBody>
+  1453→            </Table>
+  1454→          </div>
+  1455→      )}
+  1456→
+  1457→      {/* Scenario Preview Panel */}
+  1458→      <Sheet open={!!previewScenarioId} onOpenChange={(open) => { if (!open) setPreviewScenarioId(null) }}>
+  1459→        <SheetContent side="right" className="w-[520px] sm:max-w-[520px] p-0 overflow-y-auto">
+  1460→          {previewScenario && (
+  1461→            <>
+  1462→              <SheetHeader className="p-4 pb-2 border-b">
+  1463→                <div className="flex items-center gap-2">
+  1464→                  <SheetTitle className="text-lg">{previewScenario.name}</SheetTitle>
+  1465→                  <Badge
+  1466→                    variant={previewScenario.status === 'submitted' ? 'default' : 'secondary'}
+  1467→                    className={`text-[10px] px-1.5 py-0 ${previewScenario.status === 'submitted' ? 'bg-emerald text-white' : ''}`}
+  1468→                  >
+  1469→                    {previewScenario.status === 'submitted' ? t('dashboard.submitted') : t('dashboard.draft')}
+  1470→                  </Badge>
+  1471→                </div>
+  1472→                <SheetDescription className="text-sm">
+  1473→                  {previewScenario.company || previewScenario.client?.company || 'No company'}
+  1474→                </SheetDescription>
+  1475→              </SheetHeader>
+  1476→
+  1477→              <div className="p-4 space-y-4">
+  1478→                {/* Quick actions */}
+  1479→                <div className="flex items-center gap-2">
+  1480→                  <Button
+  1481→                    size="sm"
+  1482→                    className="bg-vivid-blue hover:bg-blue-700"
+  1483→                    onClick={() => openScenarioDetail(previewScenario)}
+  1484→                  >
+  1485→                    <Eye className="h-3.5 w-3.5 mr-1" />
+  1486→                    Open Full View
+  1487→                  </Button>
+  1488→                  <Button
+  1489→                    variant="outline"
+  1490→                    size="sm"
+  1491→                    onClick={async () => {
+  1492→                      try {
+  1493→                        const res = await fetch(`/api/scenarios/${previewScenario.id}/pdf`)
+  1494→                        if (!res.ok) { toast.error('Failed to generate PDF'); return }
+  1495→                        const blob = await res.blob()
+  1496→                        const url = URL.createObjectURL(blob)
+  1497→                        const a = document.createElement('a')
+  1498→                        a.href = url
+  1499→                        a.download = `MassaPro-Demo-Form-${previewScenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
+  1500→                        document.body.appendChild(a)
+  1501→                        a.click()
+  1502→                        document.body.removeChild(a)
+  1503→                        URL.revokeObjectURL(url)
+  1504→                        toast.success('PDF downloaded!')
+  1505→                      } catch { toast.error('Failed to generate PDF') }
+  1506→                    }}
+  1507→                    className="border-purple-300 text-purple-700 hover:bg-purple-50"
+  1508→                  >
+  1509→                    <FileDown className="h-3.5 w-3.5 mr-1" />
+  1510→                    Download PDF
+  1511→                  </Button>
+  1512→                </div>
+  1513→
+  1514→                <Separator />
+  1515→
+  1516→                {/* Scenario details */}
+  1517→                <div className="space-y-3">
+  1518→                  {previewScenario.companyWebsiteUrl && (
+  1519→                    <div>
+  1520→                      <p className="text-xs font-medium text-muted-foreground mb-1">Website</p>
+  1521→                      <a
+  1522→                        href={previewScenario.companyWebsiteUrl.startsWith('http') ? previewScenario.companyWebsiteUrl : `https://${previewScenario.companyWebsiteUrl}`}
+  1523→                        target="_blank"
+  1524→                        rel="noopener noreferrer"
+  1525→                        className="text-sm text-vivid-blue hover:underline"
+  1526→                      >
+  1527→                        {previewScenario.companyWebsiteUrl}
+  1528→                      </a>
+  1529→                    </div>
+  1530→                  )}
+  1531→
+  1532→                  {previewScenario.overview && (
+  1533→                    <div>
+  1534→                      <p className="text-xs font-medium text-muted-foreground mb-1">Overview</p>
+  1535→                      <p className="text-sm whitespace-pre-wrap">{previewScenario.overview}</p>
+  1536→                    </div>
+  1537→                  )}
+  1538→
+  1539→                  {previewScenario.companyGoals && (
+  1540→                    <div>
+  1541→                      <p className="text-xs font-medium text-muted-foreground mb-1">Company Goals</p>
+  1542→                      <p className="text-sm whitespace-pre-wrap">{previewScenario.companyGoals}</p>
+  1543→                    </div>
+  1544→                  )}
+  1545→
+  1546→                  {previewScenario.aiAutomationsRequired && (
+  1547→                    <div>
+  1548→                      <p className="text-xs font-medium text-muted-foreground mb-1">AI / Automations Required</p>
+  1549→                      <p className="text-sm whitespace-pre-wrap">{previewScenario.aiAutomationsRequired}</p>
+  1550→                    </div>
+  1551→                  )}
+  1552→
+  1553→                  {previewScenario.demoFocusAreas && (
+  1554→                    <div>
+  1555→                      <p className="text-xs font-medium text-muted-foreground mb-1">Demo Focus Areas</p>
+  1556→                      <p className="text-sm whitespace-pre-wrap">{previewScenario.demoFocusAreas}</p>
+  1557→                    </div>
+  1558→                  )}
+  1559→
+  1560→                  {(previewScenario.languagesVoice || previewScenario.languagesText) && (
+  1561→                    <div className="grid grid-cols-2 gap-3">
+  1562→                      {previewScenario.languagesVoice && (
+  1563→                        <div>
+  1564→                          <p className="text-xs font-medium text-muted-foreground mb-1">Voice Languages</p>
+  1565→                          <p className="text-sm">{previewScenario.languagesVoice}</p>
+  1566→                        </div>
+  1567→                      )}
+  1568→                      {previewScenario.languagesText && (
+  1569→                        <div>
+  1570→                          <p className="text-xs font-medium text-muted-foreground mb-1">Text Languages</p>
+  1571→                          <p className="text-sm">{previewScenario.languagesText}</p>
+  1572→                        </div>
+  1573→                      )}
+  1574→                    </div>
+  1575→                  )}
+  1576→
+  1577→                  {previewScenario.scriptsFlows && (
+  1578→                    <div>
+  1579→                      <p className="text-xs font-medium text-muted-foreground mb-1">Scripts / Flows</p>
+  1580→                      <p className="text-sm whitespace-pre-wrap">{previewScenario.scriptsFlows}</p>
+  1581→                    </div>
+  1582→                  )}
+  1583→
+  1584→                  {previewScenario.knowledgeBaseText && (
+  1585→                    <div>
+  1586→                      <p className="text-xs font-medium text-muted-foreground mb-1">Knowledge Base</p>
+  1587→                      <p className="text-sm whitespace-pre-wrap line-clamp-6">{previewScenario.knowledgeBaseText}</p>
+  1588→                    </div>
+  1589→                  )}
+  1590→
+  1591→                  {previewScenario.faqObjectionHandling && (
+  1592→                    <div>
+  1593→                      <p className="text-xs font-medium text-muted-foreground mb-1">FAQ / Objection Handling</p>
+  1594→                      <p className="text-sm whitespace-pre-wrap">{previewScenario.faqObjectionHandling}</p>
+  1595→                    </div>
+  1596→                  )}
+  1597→
+  1598→                  {previewScenario.requiredIntegrations && (
+  1599→                    <div>
+  1600→                      <p className="text-xs font-medium text-muted-foreground mb-1">Required Integrations</p>
+  1601→                      <p className="text-sm whitespace-pre-wrap">{previewScenario.requiredIntegrations}</p>
+  1602→                    </div>
+  1603→                  )}
+  1604→
+  1605→                  {previewScenario.erpCrmCcaas && (
+  1606→                    <div>
+  1607→                      <p className="text-xs font-medium text-muted-foreground mb-1">ERP / CRM / CCaaS</p>
+  1608→                      <p className="text-sm whitespace-pre-wrap">{previewScenario.erpCrmCcaas}</p>
+  1609→                    </div>
+  1610→                  )}
+  1611→                </div>
+  1612→
+  1613→                <Separator />
+  1614→
+  1615→                {/* Meta info */}
+  1616→                <div className="flex items-center justify-between text-xs text-muted-foreground">
+  1617→                  <span>Updated: {new Date(previewScenario.updatedAt).toLocaleDateString()}</span>
+  1618→                  <span>Created: {new Date(previewScenario.createdAt).toLocaleDateString()}</span>
+  1619→                </div>
+  1620→              </div>
+  1621→            </>
+  1622→          )}
+  1623→        </SheetContent>
+  1624→      </Sheet>
+  1625→    </div>
+  1626→  )
+  1627→}
+  1628→
