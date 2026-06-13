@@ -19,7 +19,7 @@ import { toast } from 'sonner'
 import {
   Plus, Pencil, Trash2, X, Check, Loader2, Download,
   ArrowUpDown, ArrowUp, ArrowDown, Search, Eye, Filter,
-  Undo2, Redo2, FileDown,
+  Undo2, Redo2, FileDown, FileSearch,
 } from 'lucide-react'
 import ScenarioForm from './ScenarioForm'
 import CollaboratorPanel from './CollaboratorPanel'
@@ -94,6 +94,7 @@ export default function DemoDashboard() {
   const [previewScenarioId, setPreviewScenarioId] = useState<string | null>(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [newScenarioName, setNewScenarioName] = useState('')
+  const [showPdfPreview, setShowPdfPreview] = useState(false)
 
   // Filters & Sort
   const [searchQuery, setSearchQuery] = useState('')
@@ -1031,6 +1032,16 @@ export default function DemoDashboard() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setShowPdfPreview(true)}
+              title="Preview PDF"
+              className="border-purple-300 text-purple-700 hover:bg-purple-50"
+            >
+              <FileSearch className="h-3.5 w-3.5 mr-1" />
+              Preview
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={async () => {
                 try {
                   const res = await fetch(`/api/scenarios/${currentScenario.id}/pdf`)
@@ -1120,6 +1131,50 @@ export default function DemoDashboard() {
             <ScenarioExport scenarioId={currentScenario.id} scenarioName={currentScenario.name} />
           </TabsContent>
         </Tabs>
+
+        {/* PDF Preview Dialog */}
+        <Dialog open={showPdfPreview} onOpenChange={setShowPdfPreview}>
+          <DialogContent className="max-w-4xl h-[90vh] p-0 flex flex-col">
+            <DialogHeader className="px-4 py-3 border-b flex-shrink-0">
+              <div className="flex items-center justify-between w-full">
+                <DialogTitle className="text-base">PDF Preview — {currentScenario.name}</DialogTitle>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/scenarios/${currentScenario.id}/pdf`)
+                        if (!res.ok) { toast.error('Failed to generate PDF'); return }
+                        const blob = await res.blob()
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `MassaPro-Demo-Form-${currentScenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
+                        document.body.appendChild(a)
+                        a.click()
+                        document.body.removeChild(a)
+                        URL.revokeObjectURL(url)
+                        toast.success('PDF downloaded!')
+                      } catch { toast.error('Failed to generate PDF') }
+                    }}
+                    className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                  >
+                    <Download className="h-3.5 w-3.5 mr-1" />
+                    Download
+                  </Button>
+                </div>
+              </div>
+            </DialogHeader>
+            <div className="flex-1 min-h-0">
+              <iframe
+                src={`/api/scenarios/${currentScenario.id}/pdf?preview=true`}
+                className="w-full h-full border-0"
+                title="PDF Preview"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     )
   }
@@ -1508,6 +1563,20 @@ export default function DemoDashboard() {
                   >
                     <FileDown className="h-3.5 w-3.5 mr-1" />
                     Download PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setPreviewScenarioId(null)
+                      setActiveScenarioId(previewScenario.id)
+                      setViewMode('detail')
+                      setTimeout(() => setShowPdfPreview(true), 300)
+                    }}
+                    className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                  >
+                    <FileSearch className="h-3.5 w-3.5 mr-1" />
+                    Preview PDF
                   </Button>
                 </div>
 

@@ -441,11 +441,15 @@ export async function GET(
 
     const fileName = `MassaPro-Demo-Form-${scenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
 
+    // Support ?preview=true for inline viewing (iframe) vs download
+    const isPreview = req.nextUrl.searchParams.get('preview') === 'true'
+    const disposition = isPreview ? 'inline' : 'attachment'
+
     return new NextResponse(pdfBuffer, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${fileName}"`,
+        'Content-Disposition': `${disposition}; filename="${fileName}"`,
         'Content-Length': pdfBuffer.length.toString(),
       },
     })
