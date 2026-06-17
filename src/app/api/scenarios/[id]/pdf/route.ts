@@ -259,21 +259,39 @@ export async function GET(
 
       const isRTL = containsRTL(content)
 
-      // Section title: always LTR, left-aligned
+      // CRITICAL: reset doc.x to left margin before rendering the title.
+      // The previous section may have been RTL content rendered via
+      // drawRTLText(), which leaves doc.x somewhere in the middle of the
+      // page when the last RTL line is short. If we don't reset, the next
+      // text() call computes its width as (page.rightMargin - doc.x) and
+      // renders in a narrow column on the right side of the page.
+      doc.x = MARGIN
+
+      // Section title: always LTR, left-aligned, full content width
       doc.font('Helvetica-Bold').fontSize(12).fillColor(darkGray)
-      doc.text(`${number}. ${title}`, { continued: false, align: 'left' })
+      doc.text(`${number}. ${title}`, MARGIN, doc.y, {
+        continued: false,
+        align: 'left',
+        width: CONTENT_WIDTH,
+      })
       doc.moveDown(0.3)
 
       if (isRTL) {
         // Use custom RTL renderer for Hebrew content
         drawRTLText(content, 'DejaVuSans', 10, bodyGray, CONTENT_WIDTH, 3)
       } else {
-        // Normal LTR text
+        // Normal LTR text — pass explicit x, y, width so it always uses
+        // the full content width regardless of where doc.x currently is.
         doc.font('Helvetica').fontSize(10).fillColor(bodyGray)
-        doc.text(content, { lineGap: 3, align: 'left' })
+        doc.text(content, MARGIN, doc.y, {
+          lineGap: 3,
+          align: 'left',
+          width: CONTENT_WIDTH,
+        })
       }
 
       doc.moveDown(0.8)
+      doc.x = MARGIN // reset again for the next section
     }
 
     // ===== PAGE 1 HEADER =====
@@ -335,25 +353,40 @@ export async function GET(
     doc.y = 110
 
     // ===== CUSTOMER INFO =====
+    doc.x = MARGIN
     const companyIsHebrew = containsRTL(companyName)
     if (companyIsHebrew) {
       doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
-      doc.text('Customer Name:', { continued: false, align: 'left' })
+      doc.text('Customer Name:', MARGIN, doc.y, {
+        continued: false,
+        align: 'left',
+        width: CONTENT_WIDTH,
+      })
       // Render Hebrew company name word-by-word for correct RTL display
       drawRTLShortText(companyName, 'DejaVuSans', 11, bodyGray, CONTENT_WIDTH)
     } else {
       doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
-      doc.text('Customer Name: ', { continued: true, align: 'left' })
+      doc.text('Customer Name: ', MARGIN, doc.y, {
+        continued: true,
+        align: 'left',
+        width: CONTENT_WIDTH,
+      })
       doc.font('Helvetica').fillColor(bodyGray)
       doc.text(companyName, { align: 'left' })
     }
 
+    doc.x = MARGIN
     doc.font('Helvetica-Bold').fontSize(11).fillColor(darkGray)
-    doc.text('Proposed Date: ', { continued: true, align: 'left' })
+    doc.text('Proposed Date: ', MARGIN, doc.y, {
+      continued: true,
+      align: 'left',
+      width: CONTENT_WIDTH,
+    })
     doc.font('Helvetica').fillColor(bodyGray)
     doc.text(proposedDate, { align: 'left' })
 
     doc.moveDown(1)
+    doc.x = MARGIN
 
     // Separator line
     doc.moveTo(MARGIN, doc.y).lineTo(PAGE_WIDTH - MARGIN, doc.y).strokeColor(lightGray).lineWidth(0.5).stroke()
@@ -386,8 +419,13 @@ export async function GET(
     // KPIs section
     if (scenario.kpis && scenario.kpis.length > 0) {
       if (doc.y > 680) doc.addPage()
+      doc.x = MARGIN
       doc.font('Helvetica-Bold').fontSize(12).fillColor(darkGray)
-      doc.text('KPIs', { continued: false, align: 'left' })
+      doc.text('KPIs', MARGIN, doc.y, {
+        continued: false,
+        align: 'left',
+        width: CONTENT_WIDTH,
+      })
       doc.moveDown(0.3)
       scenario.kpis.forEach((kpi: any) => {
         if (doc.y > MAX_CONTENT_Y) doc.addPage()
@@ -425,14 +463,20 @@ export async function GET(
           doc.x = MARGIN
           doc.y = kpiY + 10 + 3
         } else {
+          doc.x = MARGIN
           doc.font('Helvetica-Bold').fontSize(10).fillColor(bodyGray)
-          doc.text(`\u2022 ${kpi.name}`, { continued: !!kpi.targetValue, align: 'left' })
+          doc.text(`\u2022 ${kpi.name}`, MARGIN, doc.y, {
+            continued: !!kpi.targetValue,
+            align: 'left',
+            width: CONTENT_WIDTH,
+          })
           if (kpi.targetValue) {
             doc.font('Helvetica').fillColor(lightGray)
             doc.text(` \u2014 Target: ${kpi.targetValue}`, { align: 'left' })
           }
         }
         doc.text('')
+        doc.x = MARGIN
       })
       doc.moveDown(0.8)
     }
