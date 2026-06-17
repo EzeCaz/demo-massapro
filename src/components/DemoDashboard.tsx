@@ -11,7 +11,9 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
@@ -19,7 +21,7 @@ import { toast } from 'sonner'
 import {
   Plus, Pencil, Trash2, X, Check, Loader2, Download,
   ArrowUpDown, ArrowUp, ArrowDown, Search, Eye, Filter,
-  Undo2, Redo2, FileDown, FileSearch,
+  Undo2, Redo2, FileDown, FileSearch, Languages,
 } from 'lucide-react'
 import ScenarioForm from './ScenarioForm'
 import CollaboratorPanel from './CollaboratorPanel'
@@ -95,6 +97,12 @@ export default function DemoDashboard() {
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [newScenarioName, setNewScenarioName] = useState('')
   const [showPdfPreview, setShowPdfPreview] = useState(false)
+  // PDF language picker state — shared between toolbar, preview dialog, and Export tab
+  const [pdfLangDialogOpen, setPdfLangDialogOpen] = useState(false)
+  const [pdfLangSelected, setPdfLangSelected] = useState<string>('original')
+  const [pdfLangOptions, setPdfLangOptions] = useState<string[]>(['original'])
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfLangTarget, setPdfLangTarget] = useState<{ scenarioId: string; scenarioName: string } | null>(null)
 
   // Filters & Sort
   const [searchQuery, setSearchQuery] = useState('')
@@ -220,6 +228,79 @@ export default function DemoDashboard() {
     })
     return Array.from(set).sort()
   }, [scenarios])
+
+  /**
+   * Detect which languages are available for a scenario based on the presence
+   * of content in the language-specific fields (*En, *Es, *He).
+   * Always includes 'original'.
+   */
+  const detectPdfLanguages = useCallback((scenario: any): string[] => {
+    if (!scenario) return ['original']
+    const translatableFields = [
+      'overview', 'companyGoals', 'aiAutomationsRequired', 'demoFocusAreas',
+      'scriptsFlows', 'knowledgeBaseText', 'faqObjectionHandling',
+      'requiredIntegrations', 'erpCrmCcaas',
+    ]
+    const langs: string[] = ['original']
+    for (const field of translatableFields) {
+      if ((scenario[field + 'En'] || '').trim() && !langs.includes('en')) langs.push('en')
+      if ((scenario[field + 'Es'] || '').trim() && !langs.includes('es')) langs.push('es')
+      if ((scenario[field + 'He'] || '').trim() && !langs.includes('he')) langs.push('he')
+    }
+    return langs
+  }, [])
+
+  /**
+   * Actually fetch the PDF (with ?lang= param) and trigger a browser download.
+   */
+  const doDownloadPdf = useCallback(async (scenarioId: string, scenarioName: string, lang: string) => {
+    setPdfLoading(true)
+    try {
+      const url = new URL(`/api/scenarios/${scenarioId}/pdf`, window.location.origin)
+      if (lang && lang !== 'original') url.searchParams.set('lang', lang)
+      const res = await fetch(url.toString())
+      if (!res.ok) { toast.error('Failed to generate PDF'); return }
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      const langSuffix = lang && lang !== 'original' ? `-${lang}` : ''
+      a.download = `MassaPro-Demo-Form-${scenarioName.replace(/[^a-zA-Z0-9]/g, '-')}${langSuffix}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(blobUrl)
+      toast.success('PDF downloaded!')
+    } catch {
+      toast.error('Failed to generate PDF')
+    } finally {
+      setPdfLoading(false)
+    }
+  }, [])
+
+  /**
+   * Download the PDF for a scenario. If translations are available, opens the
+   * language picker dialog first; otherwise downloads the original directly.
+   */
+  const downloadScenarioPdf = useCallback((scenario: any) => {
+    if (!scenario) return
+    const langs = detectPdfLanguages(scenario)
+    if (langs.length > 1) {
+      setPdfLangOptions(langs)
+      setPdfLangSelected('original')
+      setPdfLangTarget({ scenarioId: scenario.id, scenarioName: scenario.name })
+      setPdfLangDialogOpen(true)
+    } else {
+      // No translations — download directly
+      void doDownloadPdf(scenario.id, scenario.name, 'original')
+    }
+  }, [detectPdfLanguages, doDownloadPdf])
+
+  const confirmPdfLanguage = useCallback(() => {
+    if (!pdfLangTarget) return
+    setPdfLangDialogOpen(false)
+    void doDownloadPdf(pdfLangTarget.scenarioId, pdfLangTarget.scenarioName, pdfLangSelected)
+  }, [pdfLangTarget, pdfLangSelected, doDownloadPdf])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -1042,27 +1123,7 @@ export default function DemoDashboard() {
             <Button
               variant="outline"
               size="sm"
-              onClick={async () => {
-                try {
-                  const res = await fetch(`/api/scenarios/${currentScenario.id}/pdf`)
-                  if (!res.ok) {
-                    toast.error('Failed to generate PDF')
-                    return
-                  }
-                  const blob = await res.blob()
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url
-                  a.download = `MassaPro-Demo-Form-${currentScenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
-                  document.body.appendChild(a)
-                  a.click()
-                  document.body.removeChild(a)
-                  URL.revokeObjectURL(url)
-                  toast.success('PDF downloaded!')
-                } catch (error) {
-                  toast.error('Failed to generate PDF')
-                }
-              }}
+              onClick={() => downloadScenarioPdf(currentScenario)}
               title="Download PDF"
               className="border-purple-300 text-purple-700 hover:bg-purple-50"
             >
@@ -1146,22 +1207,7 @@ export default function DemoDashboard() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`/api/scenarios/${currentScenario.id}/pdf`)
-                        if (!res.ok) { toast.error('Failed to generate PDF'); return }
-                        const blob = await res.blob()
-                        const url = URL.createObjectURL(blob)
-                        const a = document.createElement('a')
-                        a.href = url
-                        a.download = `MassaPro-Demo-Form-${currentScenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
-                        document.body.appendChild(a)
-                        a.click()
-                        document.body.removeChild(a)
-                        URL.revokeObjectURL(url)
-                        toast.success('PDF downloaded!')
-                      } catch { toast.error('Failed to generate PDF') }
-                    }}
+                    onClick={() => downloadScenarioPdf(currentScenario)}
                     className="border-purple-300 text-purple-700 hover:bg-purple-50"
                   >
                     <Download className="h-3.5 w-3.5 mr-1" />
@@ -1177,6 +1223,68 @@ export default function DemoDashboard() {
                 title="PDF Preview"
               />
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* PDF Language Picker Dialog — shown when translations are available */}
+        <Dialog open={pdfLangDialogOpen} onOpenChange={setPdfLangDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Languages className="h-5 w-5 text-purple-600" />
+                {t('export.chooseLanguage')}
+              </DialogTitle>
+              <DialogDescription>
+                {t('export.chooseLanguageDesc')}
+              </DialogDescription>
+            </DialogHeader>
+            <RadioGroup value={pdfLangSelected} onValueChange={setPdfLangSelected} className="gap-2">
+              {pdfLangOptions.map(l => {
+                const meta: Record<string, { label: string; native: string; flag: string }> = {
+                  original: { label: 'Original', native: 'Original', flag: '📄' },
+                  en: { label: 'English', native: 'English', flag: '🇬🇧' },
+                  es: { label: 'Spanish', native: 'Español', flag: '🇪🇸' },
+                  he: { label: 'Hebrew', native: 'עברית', flag: '🇮🇱' },
+                }
+                const m = meta[l] || { label: l, native: l, flag: '🌐' }
+                const isRTL = l === 'he'
+                return (
+                  <Label
+                    key={l}
+                    htmlFor={`dash-lang-${l}`}
+                    className={`flex items-center gap-3 rounded-md border p-3 cursor-pointer hover:bg-muted/50 transition-colors ${
+                      pdfLangSelected === l ? 'border-purple-400 bg-purple-50' : 'border-input'
+                    }`}
+                  >
+                    <RadioGroupItem id={`dash-lang-${l}`} value={l} />
+                    <span className="text-lg">{m.flag}</span>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium">{m.label}</div>
+                      <div className="text-xs text-muted-foreground" dir={isRTL ? 'rtl' : 'ltr'}>
+                        {m.native}
+                      </div>
+                    </div>
+                  </Label>
+                )
+              })}
+            </RadioGroup>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPdfLangDialogOpen(false)}>
+                {t('general.cancel')}
+              </Button>
+              <Button
+                onClick={confirmPdfLanguage}
+                disabled={pdfLoading}
+                className="bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                {pdfLoading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                {t('export.download')}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
