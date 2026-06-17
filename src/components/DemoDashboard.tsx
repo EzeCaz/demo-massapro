@@ -1568,27 +1568,7 @@ export default function DemoDashboard() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={async () => {
-                              try {
-                                const res = await fetch(`/api/scenarios/${scenario.id}/pdf`)
-                                if (!res.ok) {
-                                  toast.error('Failed to generate PDF')
-                                  return
-                                }
-                                const blob = await res.blob()
-                                const url = URL.createObjectURL(blob)
-                                const a = document.createElement('a')
-                                a.href = url
-                                a.download = `MassaPro-Demo-Form-${scenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
-                                document.body.appendChild(a)
-                                a.click()
-                                document.body.removeChild(a)
-                                URL.revokeObjectURL(url)
-                                toast.success('PDF downloaded!')
-                              } catch (error) {
-                                toast.error('Failed to generate PDF')
-                              }
-                            }}
+                            onClick={() => downloadScenarioPdf(scenario)}
                             title="Download PDF"
                             className="text-purple-600 hover:text-purple-800 hover:bg-purple-50"
                           >
@@ -1655,22 +1635,7 @@ export default function DemoDashboard() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`/api/scenarios/${previewScenario.id}/pdf`)
-                        if (!res.ok) { toast.error('Failed to generate PDF'); return }
-                        const blob = await res.blob()
-                        const url = URL.createObjectURL(blob)
-                        const a = document.createElement('a')
-                        a.href = url
-                        a.download = `MassaPro-Demo-Form-${previewScenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
-                        document.body.appendChild(a)
-                        a.click()
-                        document.body.removeChild(a)
-                        URL.revokeObjectURL(url)
-                        toast.success('PDF downloaded!')
-                      } catch { toast.error('Failed to generate PDF') }
-                    }}
+                    onClick={() => downloadScenarioPdf(previewScenario)}
                     className="border-purple-300 text-purple-700 hover:bg-purple-50"
                   >
                     <FileDown className="h-3.5 w-3.5 mr-1" />
