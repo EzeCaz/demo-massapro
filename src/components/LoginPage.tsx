@@ -271,7 +271,7 @@ export default function LoginPage() {
                 </div>
               )}
 
-              {/* Google Sign In (visual only) */}
+              {/* Google Sign In */}
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <span className="w-full border-t" />
@@ -285,7 +285,13 @@ export default function LoginPage() {
                 type="button"
                 variant="outline"
                 className="w-full"
-                onClick={() => toast.info(t('login.comingSoon'))}
+                disabled={loading}
+                onClick={() => {
+                  setLoading(true)
+                  // Redirect-based Google sign-in — NextAuth handles the full OAuth flow
+                  // and returns to /dashboard (or /admin for admins) after success.
+                  signIn('google', { callbackUrl: '/dashboard' })
+                }}
               >
                 <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
                   <path
