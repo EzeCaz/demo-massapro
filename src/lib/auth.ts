@@ -119,7 +119,11 @@ export const authOptions: NextAuthOptions = {
           userRecord.id = dbUser.id
         } catch (err) {
           console.error('[Auth] Google sign-in DB error:', err)
-          return false
+          // Return a string error so NextAuth surfaces it as ?error=OAuthAccountNotLinked
+          // or a generic error code — the login page will display a friendly message.
+          // Returning `false` would silently redirect to /login?error=OAuthCallback
+          // which the user can't easily distinguish from a real OAuth failure.
+          throw new Error('Google sign-in failed at the database level. Please try again.')
         }
       }
       return true

@@ -170,6 +170,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'export.pdf': 'Export PDF',
     'export.csv': 'Export CSV',
     'export.files': 'Download Files',
+    'export.download': 'Download',
+    'export.chooseLanguage': 'Choose PDF Language',
+    'export.chooseLanguageDesc': 'This scenario has translations. Select which language version to download.',
 
     // Upload
     'upload.title': 'Upload',
@@ -374,6 +377,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'export.pdf': 'Exportar PDF',
     'export.csv': 'Exportar CSV',
     'export.files': 'Descargar Archivos',
+    'export.download': 'Descargar',
+    'export.chooseLanguage': 'Elegir Idioma del PDF',
+    'export.chooseLanguageDesc': 'Este escenario tiene traducciones. Selecciona la versión de idioma a descargar.',
 
     // Upload
     'upload.title': 'Cargar',

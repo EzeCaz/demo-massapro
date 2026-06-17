@@ -1,7 +1,7 @@
 'use client'
 
 import { useSession } from 'next-auth/react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, Suspense } from 'react'
 import LoginPage from '@/components/LoginPage'
 import { Loader2 } from 'lucide-react'
 
@@ -57,5 +57,16 @@ export default function LoginPageWrapper() {
     )
   }
 
-  return <LoginPage />
+  // Wrap LoginPage in Suspense because it uses useSearchParams (required by Next.js 14+)
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-navy via-[#1E293B] to-[#0F172A]">
+          <Loader2 className="h-8 w-8 animate-spin text-white" />
+        </div>
+      }
+    >
+      <LoginPage />
+    </Suspense>
+  )
 }

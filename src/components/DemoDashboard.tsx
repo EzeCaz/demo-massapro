@@ -1128,7 +1128,11 @@ export default function DemoDashboard() {
             <TranslationPanel scenarioId={currentScenario.id} scenario={currentScenario} />
           </TabsContent>
           <TabsContent value="export" className="mt-4">
-            <ScenarioExport scenarioId={currentScenario.id} scenarioName={currentScenario.name} />
+            <ScenarioExport
+              scenarioId={currentScenario.id}
+              scenarioName={currentScenario.name}
+              scenario={currentScenario}
+            />
           </TabsContent>
         </Tabs>
 

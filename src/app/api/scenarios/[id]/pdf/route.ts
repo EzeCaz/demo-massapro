@@ -51,11 +51,47 @@ export async function GET(
       }
     }
 
+    // Optional ?lang= query parameter — when set to 'en', 'es', or 'he',
+    // the PDF will use the language-specific fields (e.g., overviewEn) when
+    // they have content, falling back to the original field otherwise.
+    // When omitted or 'original', the original (base) fields are used.
+    const requestedLang = (req.nextUrl.searchParams.get('lang') || 'original').toLowerCase()
+    const validLangs = ['original', 'en', 'es', 'he']
+    const lang = validLangs.includes(requestedLang) ? requestedLang : 'original'
+    const langSuffix = lang === 'original' ? '' : lang.charAt(0).toUpperCase() + lang.slice(1)
+
+    /**
+     * Resolve a field value for the requested language.
+     *
+     * - For 'original': return the base field value (e.g., scenario.overview)
+     * - For 'en'/'es'/'he': return the language-specific field value
+     *   (e.g., scenario.overviewEn) if it has content, otherwise fall back
+     *   to the original field so the PDF never shows empty sections.
+     */
+    const resolveField = (fieldName: string): string | null => {
+      if (lang !== 'original') {
+        const localizedValue = (scenario as any)[fieldName + langSuffix]
+        if (localizedValue && String(localizedValue).trim() !== '') {
+          return String(localizedValue)
+        }
+      }
+      const baseValue = (scenario as any)[fieldName]
+      return baseValue ? String(baseValue) : null
+    }
+
     // Generate PDF
     const companyName = scenario.company || scenario.client?.company || scenario.client?.name || 'N/A'
     const proposedDate = scenario.createdAt ? new Date(scenario.createdAt).toLocaleDateString('en-US', {
       year: 'numeric', month: 'long', day: 'numeric',
     }) : 'N/A'
+
+    // Language label displayed as a small badge near the title when lang !== 'original'
+    const languageBadgeLabel: Record<string, string> = {
+      original: '',
+      en: 'English',
+      es: 'Español',
+      he: 'עברית',
+    }
 
     const purple = '#7C3AED'
     const darkGray = '#1F2937'
@@ -267,6 +303,35 @@ export async function GET(
       doc.text(scenario.name, 90, 55, { width: PAGE_WIDTH - 140, align: 'left' })
     }
 
+    // Language badge (top-right of the purple banner) — only shown when a specific
+    // language was requested via ?lang=en|es|he. Helps the reader identify which
+    // translation variant they are looking at.
+    if (lang !== 'original') {
+      const badgeLabel = languageBadgeLabel[lang] || ''
+      if (badgeLabel) {
+        const badgeIsRTL = containsRTL(badgeLabel)
+        const badgeFont = badgeIsRTL ? 'DejaVuSans' : 'Helvetica-Bold'
+        const badgeFontSize = 9
+        const badgePadding = 8
+        const badgeText = `LANG: ${badgeLabel}`
+        const badgeWidth = doc.font(badgeFont).fontSize(badgeFontSize).widthOfString(badgeText) + (badgePadding * 2)
+        const badgeHeight = 18
+        const badgeX = PAGE_WIDTH - MARGIN - badgeWidth
+        const badgeY = 12
+
+        // Pill background (slightly darker purple so it stands out against the banner)
+        doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, 9).fill('#5B21B6')
+        // Pill text
+        doc.font(badgeFont).fontSize(badgeFontSize).fillColor('#FFFFFF')
+        if (badgeIsRTL) {
+          // RTL text: render right-aligned within the badge
+          drawRTLShortText(badgeText, badgeFont, badgeFontSize, '#FFFFFF', badgeWidth - badgePadding * 2, badgeX + badgePadding, badgeY + 4)
+        } else {
+          doc.text(badgeText, badgeX + badgePadding, badgeY + 4, { width: badgeWidth - badgePadding * 2, align: 'center', lineBreak: false })
+        }
+      }
+    }
+
     doc.y = 110
 
     // ===== CUSTOMER INFO =====
@@ -295,13 +360,16 @@ export async function GET(
     doc.moveDown(0.8)
 
     // ===== SECTIONS =====
-    drawSection(1, 'Company Website URL', scenario.companyWebsiteUrl)
-    drawSection(2, 'OVERVIEW', scenario.overview)
-    drawSection(3, 'Company Goals', scenario.companyGoals)
-    drawSection(4, 'AI / Automations Required', scenario.aiAutomationsRequired)
-    drawSection(5, 'Demo Focus Areas', scenario.demoFocusAreas)
+    // Use resolveField() so that the PDF renders the language-specific variant
+    // when ?lang=en|es|he is requested (falling back to the original text if the
+    // translation is empty for that field).
+    drawSection(1, 'Company Website URL', scenario.companyWebsiteUrl) // URLs are not translated
+    drawSection(2, 'OVERVIEW', resolveField('overview'))
+    drawSection(3, 'Company Goals', resolveField('companyGoals'))
+    drawSection(4, 'AI / Automations Required', resolveField('aiAutomationsRequired'))
+    drawSection(5, 'Demo Focus Areas', resolveField('demoFocusAreas'))
 
-    // Languages section
+    // Languages section (always uses original — these are short labels like "English, Spanish")
     const languages: string[] = []
     if (scenario.languagesVoice) languages.push(`Voice: ${scenario.languagesVoice}`)
     if (scenario.languagesText) languages.push(`Text: ${scenario.languagesText}`)
@@ -309,11 +377,11 @@ export async function GET(
       drawSection(6, 'Languages (voice + text)', languages.join('\n'))
     }
 
-    drawSection(7, 'Scripts / Flows', scenario.scriptsFlows)
-    drawSection(8, 'Knowledge Base', scenario.knowledgeBaseText)
-    drawSection(9, 'FAQ / Objection Handling', scenario.faqObjectionHandling)
-    drawSection(10, 'Required Integrations', scenario.requiredIntegrations)
-    drawSection(11, 'ERP / CRM / CCaaS', scenario.erpCrmCcaas)
+    drawSection(7, 'Scripts / Flows', resolveField('scriptsFlows'))
+    drawSection(8, 'Knowledge Base', resolveField('knowledgeBaseText'))
+    drawSection(9, 'FAQ / Objection Handling', resolveField('faqObjectionHandling'))
+    drawSection(10, 'Required Integrations', resolveField('requiredIntegrations'))
+    drawSection(11, 'ERP / CRM / CCaaS', resolveField('erpCrmCcaas'))
 
     // KPIs section
     if (scenario.kpis && scenario.kpis.length > 0) {
@@ -447,7 +515,9 @@ export async function GET(
 
     console.log(`[PDF] Generated PDF size: ${pdfBuffer.length} bytes, pages: ${pageCount}`)
 
-    const fileName = `MassaPro-Demo-Form-${scenario.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
+    const safeName = scenario.name.replace(/[^a-zA-Z0-9]/g, '-')
+    const langSuffixForFile = lang !== 'original' ? `-${lang}` : ''
+    const fileName = `MassaPro-Demo-Form-${safeName}${langSuffixForFile}.pdf`
 
     // Support ?preview=true for inline viewing (iframe) vs download
     const isPreview = req.nextUrl.searchParams.get('preview') === 'true'

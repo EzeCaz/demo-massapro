@@ -1,22 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useLanguage } from '@/hooks/useLanguage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { Eye, EyeOff, Mail, Lock, User, Building2 } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, User, Building2, AlertCircle } from 'lucide-react'
 
 export default function LoginPage() {
   const { t } = useLanguage()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isSignUp, setIsSignUp] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [oauthError, setOauthError] = useState<string | null>(null)
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -24,6 +26,25 @@ export default function LoginPage() {
     company: '',
     confirmPassword: '',
   })
+
+  // Map NextAuth error codes to user-friendly messages.
+  // NextAuth redirects to /login?error=... when OAuth/credentials sign-in fails.
+  useEffect(() => {
+    const errCode = searchParams.get('error')
+    if (!errCode) {
+      setOauthError(null)
+      return
+    }
+    const errorMap: Record<string, string> = {
+      OAuthCallback: 'Google sign-in failed. This usually happens when your Google account is not authorized for this app, or when the OAuth consent screen rejects the request. Please try a different account or contact support.',
+      OAuthAccountNotLinked: 'This email is already registered with a password. Please sign in with your password instead of Google, or contact support to link your Google account.',
+      AccessDenied: 'Access was denied. Please approve the Google consent prompt to continue, or contact support if you believe this is an error.',
+      Configuration: 'The Google sign-in is not configured correctly on the server. Please contact support.',
+      Verification: 'The sign-in link is invalid or has expired. Please try again.',
+      Default: 'Sign-in failed. Please try again or contact support.',
+    }
+    setOauthError(errorMap[errCode] || `Sign-in error: ${errCode}`)
+  }, [searchParams])
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -154,6 +175,24 @@ export default function LoginPage() {
             </div>
           </CardHeader>
           <CardContent>
+            {/* OAuth error banner — shown when NextAuth redirects back with ?error=... */}
+            {oauthError && (
+              <div className="mb-4 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <p className="font-medium mb-0.5">Sign-in failed</p>
+                  <p className="text-xs leading-relaxed">{oauthError}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOauthError(null)}
+                  className="text-red-400 hover:text-red-600 text-xs"
+                  aria-label="Dismiss"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             <form onSubmit={isSignUp ? handleSignUp : handleSignIn} className="space-y-4">
               {isSignUp && (
                 <div className="space-y-2">
