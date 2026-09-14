@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Plus, Trash2, ExternalLink } from 'lucide-react'
+import { useLanguage } from '@/hooks/useLanguage'
 
 export interface LinkEntry {
   url: string
@@ -27,8 +28,13 @@ interface LinksEditorProps {
  * Reusable editor for a list of external URL links.
  * Each link has: URL, Name, Short description.
  * Users can click "+" to add more links.
+ *
+ * All visible labels and placeholders use the user's selected UI language
+ * (English or Spanish) via the useLanguage() hook.
  */
 export default function LinksEditor({ links, onChange, compact = false }: LinksEditorProps) {
+  const { t } = useLanguage()
+
   const addLink = () => {
     onChange([...links, { url: '', name: '', description: '' }])
   }
@@ -48,7 +54,7 @@ export default function LinksEditor({ links, onChange, compact = false }: LinksE
       <div className="flex items-center justify-between">
         <Label className="text-sm font-medium flex items-center gap-1.5">
           <ExternalLink className="h-3.5 w-3.5" />
-          External URL Links
+          {t('links.title')}
         </Label>
         <Button
           type="button"
@@ -58,13 +64,13 @@ export default function LinksEditor({ links, onChange, compact = false }: LinksE
           className="h-7 text-xs"
         >
           <Plus className="h-3.5 w-3.5 mr-1" />
-          Add Link
+          {t('links.add')}
         </Button>
       </div>
 
       {links.length === 0 ? (
         <p className="text-xs text-muted-foreground italic">
-          No external links added. Click &quot;Add Link&quot; to add one.
+          {t('links.empty')}
         </p>
       ) : (
         <div className="space-y-3">
@@ -78,7 +84,7 @@ export default function LinksEditor({ links, onChange, compact = false }: LinksE
                   type="text"
                   value={link.name}
                   onChange={e => updateLink(index, 'name', e.target.value)}
-                  placeholder="Link name (e.g., Company Website)"
+                  placeholder={t('links.namePlaceholder')}
                   className="flex-1 h-8 text-sm"
                 />
                 <Button
@@ -87,7 +93,8 @@ export default function LinksEditor({ links, onChange, compact = false }: LinksE
                   size="sm"
                   onClick={() => removeLink(index)}
                   className="text-destructive hover:text-destructive h-8 px-2"
-                  title="Remove link"
+                  title={t('links.remove')}
+                  aria-label={t('links.remove')}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -96,13 +103,13 @@ export default function LinksEditor({ links, onChange, compact = false }: LinksE
                 type="url"
                 value={link.url}
                 onChange={e => updateLink(index, 'url', e.target.value)}
-                placeholder="https://example.com"
+                placeholder={t('links.urlPlaceholder')}
                 className="h-8 text-sm"
               />
               <Textarea
                 value={link.description}
                 onChange={e => updateLink(index, 'description', e.target.value)}
-                placeholder="Short description (optional)"
+                placeholder={t('links.descriptionPlaceholder')}
                 className="min-h-[40px] text-sm"
               />
             </div>

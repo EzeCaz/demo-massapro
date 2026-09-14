@@ -95,6 +95,18 @@ export const translations: Record<Language, Record<string, string>> = {
     'form.upload': 'Upload',
     'form.dragDrop': 'Drag and drop files here, or click to browse',
 
+    // External URL Links
+    'links.title': 'External URL Links',
+    'links.add': 'Add Link',
+    'links.addMore': 'Add Link',
+    'links.nameLabel': 'Link name',
+    'links.namePlaceholder': 'Link name (e.g., Company Website)',
+    'links.urlPlaceholder': 'https://example.com',
+    'links.descriptionPlaceholder': 'Short description (optional)',
+    'links.empty': 'No external links added. Click "Add Link" to add one.',
+    'links.remove': 'Remove link',
+    'links.addBtn': 'Add',
+
     // Tabs
     'tab.collaborators': 'Collaborators',
     'tab.comments': 'Comments',
@@ -301,6 +313,18 @@ export const translations: Record<Language, Record<string, string>> = {
     'form.knowledgeBaseFiles': 'Archivos de Base de Conocimiento',
     'form.upload': 'Subir',
     'form.dragDrop': 'Arrastra y suelta archivos aquí, o haz clic para buscar',
+
+    // External URL Links
+    'links.title': 'Enlaces URL Externos',
+    'links.add': 'Agregar Enlace',
+    'links.addMore': 'Agregar Enlace',
+    'links.nameLabel': 'Nombre del enlace',
+    'links.namePlaceholder': 'Nombre del enlace (ej., Sitio Web de la Empresa)',
+    'links.urlPlaceholder': 'https://ejemplo.com',
+    'links.descriptionPlaceholder': 'Descripción breve (opcional)',
+    'links.empty': 'No hay enlaces externos agregados. Haz clic en "Agregar Enlace" para añadir uno.',
+    'links.remove': 'Eliminar enlace',
+    'links.addBtn': 'Agregar',
 
     // Tabs
     'tab.collaborators': 'Colaboradores',

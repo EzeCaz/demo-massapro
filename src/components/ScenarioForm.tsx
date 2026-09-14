@@ -68,7 +68,7 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
 
   const handleAddLink = async () => {
     if (!newLink.url.trim() || !newLink.name.trim()) {
-      toast.error('URL and name are required')
+      toast.error(t('links.nameLabel') + ' + URL ' + t('links.addBtn'))
       return
     }
     setSavingLink(true)
@@ -83,15 +83,15 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
         }),
       })
       if (res.ok) {
-        toast.success('Link added!')
+        toast.success(t('links.add') + ' ✓')
         setNewLink({ url: '', name: '', description: '' })
         queryClient.invalidateQueries({ queryKey: ['links', scenario.id] })
       } else {
         const data = await res.json()
-        toast.error(data.error || 'Failed to add link')
+        toast.error(data.error || t('dashboard.error'))
       }
     } catch {
-      toast.error('Failed to add link')
+      toast.error(t('dashboard.error'))
     } finally {
       setSavingLink(false)
     }
@@ -103,13 +103,13 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
         method: 'DELETE',
       })
       if (res.ok) {
-        toast.success('Link removed')
+        toast.success(t('links.remove') + ' ✓')
         queryClient.invalidateQueries({ queryKey: ['links', scenario.id] })
       } else {
-        toast.error('Failed to remove link')
+        toast.error(t('dashboard.error'))
       }
     } catch {
-      toast.error('Failed to remove link')
+      toast.error(t('dashboard.error'))
     }
   }
 
@@ -600,7 +600,7 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
           <div className="space-y-3">
             <Label className="text-sm font-medium flex items-center gap-1.5">
               <ExternalLink className="h-4 w-4" />
-              External URL Links
+              {t('links.title')}
             </Label>
 
             {/* Existing links list */}
@@ -649,7 +649,7 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
                 <Input
                   value={newLink.name}
                   onChange={e => setNewLink(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Link name"
+                  placeholder={t('links.namePlaceholder')}
                   className="h-8 text-sm flex-1"
                 />
                 <Button
@@ -665,20 +665,20 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
                   ) : (
                     <Plus className="h-3.5 w-3.5 mr-1" />
                   )}
-                  Add
+                  {t('links.addBtn')}
                 </Button>
               </div>
               <Input
                 type="url"
                 value={newLink.url}
                 onChange={e => setNewLink(prev => ({ ...prev, url: e.target.value }))}
-                placeholder="https://example.com"
+                placeholder={t('links.urlPlaceholder')}
                 className="h-8 text-sm"
               />
               <Textarea
                 value={newLink.description}
                 onChange={e => setNewLink(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Short description (optional)"
+                placeholder={t('links.descriptionPlaceholder')}
                 className="min-h-[40px] text-sm"
               />
             </div>
