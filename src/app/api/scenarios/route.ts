@@ -73,8 +73,17 @@ export async function POST(req: NextRequest) {
                 targetValue: kpi.targetValue || null,
               }))
             } : undefined,
+            links: item.links ? {
+              create: item.links
+                .filter((l: { url?: string; name?: string }) => l.url && l.url.trim() && l.name && l.name.trim())
+                .map((l: { url: string; name: string; description?: string }) => ({
+                  url: l.url.trim(),
+                  name: l.name.trim(),
+                  description: l.description?.trim() || null,
+                }))
+            } : undefined,
           },
-          include: { kpis: true },
+          include: { kpis: true, links: true },
         })
         scenarios.push(scenario)
       }
@@ -82,14 +91,23 @@ export async function POST(req: NextRequest) {
     }
 
     // Single scenario creation
-    const { name, order } = body
+    const { name, order, links } = body
     const scenario = await db.scenario.create({
       data: {
         clientId: userId,
         name: name || 'New Scenario',
         order: order ?? 0,
+        links: links && Array.isArray(links) ? {
+          create: links
+            .filter((l: { url?: string; name?: string }) => l.url && l.url.trim() && l.name && l.name.trim())
+            .map((l: { url: string; name: string; description?: string }) => ({
+              url: l.url.trim(),
+              name: l.name.trim(),
+              description: l.description?.trim() || null,
+            }))
+        } : undefined,
       },
-      include: { kpis: true },
+      include: { kpis: true, links: true },
     })
 
     return NextResponse.json(scenario, { status: 201 })

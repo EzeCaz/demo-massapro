@@ -30,6 +30,7 @@ import ChangeLogPanel from './ChangeLogPanel'
 import AdminNotesPanel from './AdminNotesPanel'
 import TranslationPanel from './TranslationPanel'
 import ScenarioExport from './ScenarioExport'
+import LinksEditor from './LinksEditor'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
 
@@ -96,6 +97,8 @@ export default function DemoDashboard() {
   const [previewScenarioId, setPreviewScenarioId] = useState<string | null>(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [newScenarioName, setNewScenarioName] = useState('')
+  // External URL links for new scenario creation dialog
+  const [newScenarioLinks, setNewScenarioLinks] = useState<{ url: string; name: string; description: string }[]>([])
   const [showPdfPreview, setShowPdfPreview] = useState(false)
   // PDF language picker state — shared between toolbar, preview dialog, and Export tab
   const [pdfLangDialogOpen, setPdfLangDialogOpen] = useState(false)
@@ -551,17 +554,26 @@ export default function DemoDashboard() {
       toast.error('Please enter a scenario name')
       return
     }
+    // Filter out incomplete link rows (need both URL and name)
+    const validLinks = newScenarioLinks.filter(
+      l => l.url.trim() && l.name.trim()
+    ).map(l => ({ url: l.url.trim(), name: l.name.trim(), description: l.description.trim() }))
     try {
       const res = await fetch('/api/scenarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newScenarioName, order: scenarios.length }),
+        body: JSON.stringify({
+          name: newScenarioName,
+          order: scenarios.length,
+          links: validLinks,
+        }),
       })
       if (res.ok) {
         const newScenario = await res.json()
         toast.success('Scenario added!')
         setAddDialogOpen(false)
         setNewScenarioName('')
+        setNewScenarioLinks([])
         // Auto-open the scenario detail view
         setActiveScenarioId(newScenario.id)
         setViewMode('detail')
@@ -1037,24 +1049,34 @@ export default function DemoDashboard() {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground mb-4">{t('general.noData')}</p>
-        <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <Dialog open={addDialogOpen} onOpenChange={(open) => {
+          setAddDialogOpen(open)
+          if (!open) setNewScenarioLinks([])
+        }}>
           <DialogTrigger asChild>
             <Button className="bg-vivid-blue hover:bg-blue-700">
               <Plus className="h-4 w-4 mr-1" />
               {t('dashboard.addScenario')}
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{t('dashboard.addScenario')}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-3 pt-2">
+            <div className="space-y-4 pt-2">
               <Input
                 value={newScenarioName}
                 onChange={e => setNewScenarioName(e.target.value)}
                 placeholder={t('setup.scenarioName')}
                 onKeyDown={e => e.key === 'Enter' && handleAddScenario()}
               />
+              <div className="border-t pt-4">
+                <LinksEditor
+                  links={newScenarioLinks}
+                  onChange={setNewScenarioLinks}
+                  compact
+                />
+              </div>
               <Button onClick={handleAddScenario} className="w-full bg-vivid-blue hover:bg-blue-700">
                 {t('general.add')}
               </Button>
@@ -1388,24 +1410,34 @@ export default function DemoDashboard() {
               </Button>
             )}
 
-            <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+            <Dialog open={addDialogOpen} onOpenChange={(open) => {
+              setAddDialogOpen(open)
+              if (!open) setNewScenarioLinks([])
+            }}>
               <DialogTrigger asChild>
                 <Button className="bg-vivid-blue hover:bg-blue-700">
                   <Plus className="h-4 w-4 mr-1" />
                   {t('dashboard.addScenario')}
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>{t('dashboard.addScenario')}</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-3 pt-2">
+                <div className="space-y-4 pt-2">
                   <Input
                     value={newScenarioName}
                     onChange={e => setNewScenarioName(e.target.value)}
                     placeholder={t('setup.scenarioName')}
                     onKeyDown={e => e.key === 'Enter' && handleAddScenario()}
                   />
+                  <div className="border-t pt-4">
+                    <LinksEditor
+                      links={newScenarioLinks}
+                      onChange={setNewScenarioLinks}
+                      compact
+                    />
+                  </div>
                   <Button onClick={handleAddScenario} className="w-full bg-vivid-blue hover:bg-blue-700">
                     {t('general.add')}
                   </Button>

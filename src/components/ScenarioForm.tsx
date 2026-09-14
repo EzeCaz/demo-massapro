@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { Plus, Trash2, Upload, FileText, X, Loader2, Link } from 'lucide-react'
+import { Plus, Trash2, Upload, FileText, X, Loader2, Link, ExternalLink } from 'lucide-react'
 import LanguageMultiSelect from './LanguageMultiSelect'
 
 interface ScenarioFormProps {
@@ -26,6 +26,9 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
   const [saving, setSaving] = useState(false)
   const [translating, setTranslating] = useState(false)
   const [uploading, setUploading] = useState(false)
+  // External links — local state for new-link form + server-side list
+  const [newLink, setNewLink] = useState({ url: '', name: '', description: '' })
+  const [savingLink, setSavingLink] = useState(false)
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const kbFileInputRef = useRef<HTMLInputElement>(null)
@@ -51,6 +54,64 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
     },
     enabled: !!scenario?.id,
   })
+
+  // External URL Links
+  const { data: links = [] } = useQuery({
+    queryKey: ['links', scenario?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/scenarios/${scenario.id}/links`)
+      if (!res.ok) throw new Error('Failed to fetch links')
+      return res.json()
+    },
+    enabled: !!scenario?.id,
+  })
+
+  const handleAddLink = async () => {
+    if (!newLink.url.trim() || !newLink.name.trim()) {
+      toast.error('URL and name are required')
+      return
+    }
+    setSavingLink(true)
+    try {
+      const res = await fetch(`/api/scenarios/${scenario.id}/links`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: newLink.url.trim(),
+          name: newLink.name.trim(),
+          description: newLink.description.trim(),
+        }),
+      })
+      if (res.ok) {
+        toast.success('Link added!')
+        setNewLink({ url: '', name: '', description: '' })
+        queryClient.invalidateQueries({ queryKey: ['links', scenario.id] })
+      } else {
+        const data = await res.json()
+        toast.error(data.error || 'Failed to add link')
+      }
+    } catch {
+      toast.error('Failed to add link')
+    } finally {
+      setSavingLink(false)
+    }
+  }
+
+  const handleDeleteLink = async (linkId: string) => {
+    try {
+      const res = await fetch(`/api/scenarios/${scenario.id}/links/${linkId}`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        toast.success('Link removed')
+        queryClient.invalidateQueries({ queryKey: ['links', scenario.id] })
+      } else {
+        toast.error('Failed to remove link')
+      }
+    } catch {
+      toast.error('Failed to remove link')
+    }
+  }
 
   // Initialize form data from scenario
   useEffect(() => {
@@ -531,6 +592,96 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
                 ))}
               </div>
             )}
+          </div>
+
+          <Separator />
+
+          {/* External URL Links */}
+          <div className="space-y-3">
+            <Label className="text-sm font-medium flex items-center gap-1.5">
+              <ExternalLink className="h-4 w-4" />
+              External URL Links
+            </Label>
+
+            {/* Existing links list */}
+            {links.length > 0 && (
+              <div className="space-y-2">
+                {links.map((link: any) => (
+                  <div
+                    key={link.id}
+                    className="flex items-start justify-between p-3 border rounded-md gap-3"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">{link.name}</span>
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-vivid-blue hover:underline flex items-center gap-0.5 truncate"
+                        >
+                          {link.url}
+                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                        </a>
+                      </div>
+                      {link.description && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {link.description}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteLink(link.id)}
+                      className="text-destructive hover:text-destructive h-6 w-6 p-0 flex-shrink-0"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add new link form */}
+            <div className="border border-dashed rounded-lg p-3 space-y-2 bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Input
+                  value={newLink.name}
+                  onChange={e => setNewLink(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Link name"
+                  className="h-8 text-sm flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddLink}
+                  disabled={savingLink}
+                  className="h-8"
+                >
+                  {savingLink ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                  )}
+                  Add
+                </Button>
+              </div>
+              <Input
+                type="url"
+                value={newLink.url}
+                onChange={e => setNewLink(prev => ({ ...prev, url: e.target.value }))}
+                placeholder="https://example.com"
+                className="h-8 text-sm"
+              />
+              <Textarea
+                value={newLink.description}
+                onChange={e => setNewLink(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Short description (optional)"
+                className="min-h-[40px] text-sm"
+              />
+            </div>
           </div>
         </CardContent>
       </Card>

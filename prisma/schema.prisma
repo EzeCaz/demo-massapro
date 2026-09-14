@@ -78,6 +78,7 @@ model Scenario {
   updatedAt                 DateTime          @updatedAt
   kpis                      KPI[]
   attachments               Attachment[]
+  links                    ScenarioLink[]
   collaborations            Collaboration[]
   changeLogs                ChangeLog[]
   comments                  ScenarioComment[]
@@ -104,6 +105,17 @@ model Attachment {
   fileSize    Int?
   category    String? // "knowledge_base" or "attachment"
   createdAt   DateTime @default(now())
+}
+
+model ScenarioLink {
+  id          String   @id @default(cuid())
+  scenarioId  String
+  scenario    Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  url         String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Collaboration {
