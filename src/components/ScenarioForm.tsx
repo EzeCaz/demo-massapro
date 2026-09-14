@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { Plus, Trash2, Upload, FileText, FileAudio, X, Loader2, Link, ExternalLink } from 'lucide-react'
+import { Plus, Trash2, Upload, FileText, FileAudio, FileCode, X, Loader2, Link, ExternalLink } from 'lucide-react'
 import LanguageMultiSelect from './LanguageMultiSelect'
 
 interface ScenarioFormProps {
@@ -269,6 +269,14 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
   const isAudioFile = (fileType?: string | null, fileName?: string | null): boolean => {
     if (fileType && fileType.startsWith('audio/')) return true
     if (fileName && /\.(mp3|wav|ogg|oga|m4a|aac|flac|wma|weba|opus)$/i.test(fileName)) return true
+    return false
+  }
+
+  // Markdown documents (.md / .markdown / .mdx) — some browsers/OSes send
+  // no MIME or a generic 'text/plain' for them, so detect by extension too.
+  const isMarkdownFile = (fileType?: string | null, fileName?: string | null): boolean => {
+    if (fileType && /^text\/x?markdown$/i.test(fileType)) return true
+    if (fileName && /\.(md|markdown|mdx)$/i.test(fileName)) return true
     return false
   }
 
@@ -583,18 +591,21 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
               <div className="space-y-2">
                 {attachments.map((att: any) => {
                   const audio = isAudioFile(att.fileType, att.fileName)
+                  const markdown = !audio && isMarkdownFile(att.fileType, att.fileName)
                   return (
                     <div key={att.id} className="p-2 border rounded-md space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 min-w-0">
                           {audio ? (
                             <FileAudio className="h-4 w-4 text-vivid-blue flex-shrink-0" />
+                          ) : markdown ? (
+                            <FileCode className="h-4 w-4 text-violet-500 flex-shrink-0" />
                           ) : (
                             <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                           )}
                           <span className="text-sm truncate">{att.fileName}</span>
                           <Badge variant="outline" className="text-xs flex-shrink-0">
-                            {att.category === 'knowledge_base' ? 'KB' : audio ? t('form.audioBadge') : 'File'}
+                            {att.category === 'knowledge_base' ? 'KB' : audio ? t('form.audioBadge') : markdown ? t('form.mdBadge') : 'File'}
                           </Badge>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
