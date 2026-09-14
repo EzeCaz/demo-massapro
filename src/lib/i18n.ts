@@ -94,6 +94,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'form.knowledgeBaseFiles': 'Knowledge Base Files',
     'form.upload': 'Upload',
     'form.dragDrop': 'Drag and drop files here, or click to browse',
+    'form.dragDropHint': 'Documents, images, and audio files are supported (max 4MB per file)',
+    'form.fileTooLarge': 'exceeds the 4MB upload limit and was not uploaded',
+    'form.audioBadge': 'Audio',
+    'form.open': 'Open',
+    'form.download': 'Download',
 
     // External URL Links
     'links.title': 'External URL Links',
@@ -313,6 +318,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'form.knowledgeBaseFiles': 'Archivos de Base de Conocimiento',
     'form.upload': 'Subir',
     'form.dragDrop': 'Arrastra y suelta archivos aquí, o haz clic para buscar',
+    'form.dragDropHint': 'Se admiten documentos, imágenes y archivos de audio (máximo 4MB por archivo)',
+    'form.fileTooLarge': 'supera el límite de subida de 4MB y no fue subido',
+    'form.audioBadge': 'Audio',
+    'form.open': 'Abrir',
+    'form.download': 'Descargar',
 
     // External URL Links
     'links.title': 'Enlaces URL Externos',

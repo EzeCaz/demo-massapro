@@ -20,13 +20,32 @@ export async function GET(
       return NextResponse.json({ error: 'Attachment not found' }, { status: 404 })
     }
 
-    const filePath = path.join('/home/z/my-project/uploads', attachment.filePath)
-    const fileBuffer = await readFile(filePath)
+    // Prefer the DB-stored content (authoritative on serverless). Fall back
+    // to the local disk copy for older attachments uploaded in local dev.
+    let fileBuffer: Buffer | null = null
+    if (attachment.data) {
+      fileBuffer = Buffer.from(attachment.data)
+    } else {
+      try {
+        const filePath = path.join('/home/z/my-project/uploads', attachment.filePath)
+        fileBuffer = await readFile(filePath)
+      } catch {
+        return NextResponse.json({ error: 'File content not found' }, { status: 404 })
+      }
+    }
 
-    return new NextResponse(fileBuffer, {
+    // Serve media types inline so browsers can play audio/video and preview
+    // images directly. Everything else downloads as an attachment.
+    const mime = attachment.fileType || 'application/octet-stream'
+    const isMedia = /^(audio|video|image)\//.test(mime)
+    const disposition = isMedia ? 'inline' : 'attachment'
+
+    return new NextResponse(new Uint8Array(fileBuffer), {
       headers: {
-        'Content-Type': attachment.fileType || 'application/octet-stream',
-        'Content-Disposition': `attachment; filename="${attachment.fileName}"`,
+        'Content-Type': mime,
+        'Content-Disposition': `${disposition}; filename="${attachment.fileName}"`,
+        'Content-Length': String(fileBuffer.length),
+        'Cache-Control': 'private, max-age=3600',
       },
     })
   } catch (error) {

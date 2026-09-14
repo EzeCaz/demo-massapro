@@ -104,6 +104,7 @@ model Attachment {
   fileType    String?
   fileSize    Int?
   category    String? // "knowledge_base" or "attachment"
+  data        Bytes? // file content stored in DB — required on serverless (Vercel) where the disk is ephemeral; also enables audio/image inline playback
   createdAt   DateTime @default(now())
 }
 

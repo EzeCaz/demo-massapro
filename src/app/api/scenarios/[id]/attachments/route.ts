@@ -41,26 +41,36 @@ export async function POST(
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    const uploadsDir = '/home/z/my-project/uploads'
-    await mkdir(uploadsDir, { recursive: true })
-
-    const fileName = `${Date.now()}-${file.name}`
-    const filePath = path.join(uploadsDir, fileName)
-
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
-    await writeFile(filePath, buffer)
 
+    const uniqueName = `${Date.now()}-${file.name}`
+
+    // Store the file content in the database. This is required on serverless
+    // platforms (Vercel) where the filesystem is ephemeral — files written to
+    // disk would be lost between invocations. It also enables inline playback
+    // of audio/video and previewing of images directly from the DB.
     const attachment = await db.attachment.create({
       data: {
         scenarioId: id,
         fileName: file.name,
-        filePath: fileName,
+        filePath: uniqueName,
         fileType: file.type,
         fileSize: file.size,
         category,
+        data: buffer,
       },
     })
+
+    // Best-effort local disk write for local development environments.
+    // Silently ignored on serverless where the disk is read-only.
+    try {
+      const uploadsDir = process.env.UPLOADS_DIR || '/home/z/my-project/uploads'
+      await mkdir(uploadsDir, { recursive: true })
+      await writeFile(path.join(uploadsDir, uniqueName), buffer)
+    } catch {
+      // Disk not writable (e.g. Vercel) — the DB copy above is authoritative.
+    }
 
     return NextResponse.json(attachment, { status: 201 })
   } catch (error) {

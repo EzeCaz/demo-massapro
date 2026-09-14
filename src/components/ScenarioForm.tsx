@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { Plus, Trash2, Upload, FileText, X, Loader2, Link, ExternalLink } from 'lucide-react'
+import { Plus, Trash2, Upload, FileText, FileAudio, X, Loader2, Link, ExternalLink } from 'lucide-react'
 import LanguageMultiSelect from './LanguageMultiSelect'
 
 interface ScenarioFormProps {
@@ -264,11 +264,26 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
   }
 
   // File upload
+  const MAX_FILE_SIZE = 4 * 1024 * 1024 // 4MB — Vercel serverless request body limit is 4.5MB
+
+  const isAudioFile = (fileType?: string | null, fileName?: string | null): boolean => {
+    if (fileType && fileType.startsWith('audio/')) return true
+    if (fileName && /\.(mp3|wav|ogg|oga|m4a|aac|flac|wma|weba|opus)$/i.test(fileName)) return true
+    return false
+  }
+
   const handleFileUpload = async (files: FileList | null, category: string = 'attachment') => {
     if (!files || files.length === 0) return
     setUploading(true)
     try {
+      let uploaded = 0
       for (const file of Array.from(files)) {
+        // Client-side size guard — Vercel rejects request bodies over ~4.5MB,
+        // so fail fast with a clear message instead of a generic 413 error.
+        if (file.size > MAX_FILE_SIZE) {
+          toast.error(`${file.name} ${t('form.fileTooLarge')}`)
+          continue
+        }
         const formData = new FormData()
         formData.append('file', file)
         formData.append('category', category)
@@ -277,9 +292,12 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
           body: formData,
         })
         if (!res.ok) throw new Error('Upload failed')
+        uploaded++
       }
-      queryClient.invalidateQueries({ queryKey: ['attachments', scenario.id] })
-      toast.success('File(s) uploaded successfully')
+      if (uploaded > 0) {
+        queryClient.invalidateQueries({ queryKey: ['attachments', scenario.id] })
+        toast.success('File(s) uploaded successfully')
+      }
     } catch (error) {
       toast.error('Failed to upload file(s)')
     } finally {
@@ -557,39 +575,60 @@ export default function ScenarioForm({ scenario, userRole }: ScenarioFormProps) 
             >
               <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
               <p className="text-sm text-muted-foreground">{t('form.dragDrop')}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t('form.dragDropHint')}</p>
             </div>
 
             {/* File list */}
             {attachments.length > 0 && (
               <div className="space-y-2">
-                {attachments.map((att: any) => (
-                  <div key={att.id} className="flex items-center justify-between p-2 border rounded-md">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">{att.fileName}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {att.category === 'knowledge_base' ? 'KB' : 'File'}
-                      </Badge>
+                {attachments.map((att: any) => {
+                  const audio = isAudioFile(att.fileType, att.fileName)
+                  return (
+                    <div key={att.id} className="p-2 border rounded-md space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {audio ? (
+                            <FileAudio className="h-4 w-4 text-vivid-blue flex-shrink-0" />
+                          ) : (
+                            <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          )}
+                          <span className="text-sm truncate">{att.fileName}</span>
+                          <Badge variant="outline" className="text-xs flex-shrink-0">
+                            {att.category === 'knowledge_base' ? 'KB' : audio ? t('form.audioBadge') : 'File'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <a
+                            href={`/api/scenarios/${scenario.id}/attachments/${att.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download={!audio}
+                            className="text-xs text-vivid-blue hover:underline"
+                          >
+                            {audio ? t('form.open') : t('form.download')}
+                          </a>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteAttachment(att.id)}
+                            className="text-destructive hover:text-destructive h-6 w-6 p-0"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      {/* Inline audio player for audio attachments */}
+                      {audio && (
+                        <audio
+                          controls
+                          preload="none"
+                          src={`/api/scenarios/${scenario.id}/attachments/${att.id}`}
+                          className="w-full h-9"
+                        />
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={`/api/scenarios/${scenario.id}/attachments/${att.id}`}
-                        target="_blank"
-                        className="text-xs text-vivid-blue hover:underline"
-                      >
-                        Download
-                      </a>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => deleteAttachment(att.id)}
-                        className="text-destructive hover:text-destructive h-6 w-6 p-0"
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
