@@ -69,3 +69,4 @@ prompt
 /Caddyfile
 mini-services/
 examples/
+.env*
