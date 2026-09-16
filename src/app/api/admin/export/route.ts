@@ -3,6 +3,12 @@ import { getServerSession } from 'next-auth'
 import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 
+// GET /api/admin/export?clientId=&scenarioId=&format=json|csv
+//
+// Per Task 18: all authenticated non-share users can export the full
+// scenario dataset (Reports view → Export tab). The data is the same
+// they can already see in the Reports dashboard. Mutations remain
+// gated by their own /api/scenarios/[id] routes.
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -12,6 +18,11 @@ export async function GET(req: NextRequest) {
 
     const userRole = (session.user as any).role
     const userId = (session.user as any).id
+
+    // Reject share-token sessions.
+    if (userRole === 'share') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const { searchParams } = new URL(req.url)
     const clientId = searchParams.get('clientId')
@@ -47,25 +58,16 @@ export async function GET(req: NextRequest) {
         },
       })
     } else {
-      if (!isAdminRole(userRole)) {
-        // Non-admin users can only export their own scenarios
-        scenarios = await db.scenario.findMany({
-          where: { OR: [{ clientId: userId }, { collaborations: { some: { collaboratorId: userId } } }] },
-          include: {
-            client: { select: { id: true, name: true, email: true, company: true } },
-            kpis: true,
-            attachments: true,
-          },
-        })
-      } else {
-        scenarios = await db.scenario.findMany({
-          include: {
-            client: { select: { id: true, name: true, email: true, company: true } },
-            kpis: true,
-            attachments: true,
-          },
-        })
-      }
+      // Per Task 18: regular users see all scenarios in the Reports
+      // dashboard — let them export the same dataset. Admins and
+      // super_admin also get the full dataset.
+      scenarios = await db.scenario.findMany({
+        include: {
+          client: { select: { id: true, name: true, email: true, company: true } },
+          kpis: true,
+          attachments: true,
+        },
+      })
     }
 
     if (format === 'csv') {

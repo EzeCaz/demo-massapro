@@ -12,8 +12,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Per Task 18: all authenticated non-share users can read invite
+    // history (Reports view). Creating invites (POST below) stays
+    // admin/super_admin-only.
     const userRole = (session.user as any).role
-    if (!isAdminRole(userRole)) {
+    if (userRole === 'share') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

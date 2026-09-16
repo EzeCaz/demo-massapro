@@ -6,28 +6,33 @@ import MassaProHeader from '@/components/MassaProHeader'
 import AdminPanel from '@/components/AdminPanel'
 import { Loader2 } from 'lucide-react'
 
+// /admin — Reports dashboard.
+//
+// Access policy (per Task 18, 2026-09-16):
+//   - All authenticated users can view this page (the "Reports" view).
+//     They see all clients and scenarios as read-only data, plus the
+//     Export tab so they can download data.
+//   - super_admin: link and page title show "Admin Panel".
+//   - admin + user: link and page title show "Reports".
+//   - Mutating actions (edit clients, create invites, delete) remain
+//     admin/super_admin-only and are hidden in the AdminPanel component
+//     via the `isAdmin` / `isSuperAdmin` checks.
+//
+// The page no longer redirects non-admin users away — they're allowed
+// in to read the data.
 export default function AdminPage() {
   const { data: session, status } = useSession()
   const hasRedirected = useRef(false)
 
-  // Handle auth redirects using hard navigation (window.location.href)
-  // to avoid redirect loops where useSession() returns stale data
   useEffect(() => {
     if (status === 'loading' || hasRedirected.current) return
 
-    if (status === 'authenticated') {
-      const userRole = (session?.user as Record<string, unknown>)?.role as string | undefined
-      if (userRole !== 'admin' && userRole !== 'super_admin') {
-        hasRedirected.current = true
-        window.location.href = '/dashboard'
-      }
-    } else if (status === 'unauthenticated') {
+    if (status === 'unauthenticated') {
       hasRedirected.current = true
       window.location.href = '/login'
     }
-  }, [status, session])
+  }, [status])
 
-  // Show loading while session is being determined or redirecting
   if (status !== 'authenticated') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -44,20 +49,17 @@ export default function AdminPage() {
     )
   }
 
-  // Check role — show spinner while redirecting non-admin users
+  // Share sessions (role === 'share') are scoped to ONE integration setup
+  // and have no business being on the admin/reports page — they only get
+  // there if they manually type the URL. Bounce them to /integration-setup.
   const userRole = (session?.user as any)?.role
-  if (userRole !== 'admin' && userRole !== 'super_admin') {
+  if (userRole === 'share') {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/integration-setup'
+    }
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <img
-            src="/massapro-logo.png"
-            alt="MassaPro"
-            className="h-16 w-auto mx-auto mb-4"
-          />
-          <Loader2 className="h-8 w-8 animate-spin text-vivid-blue mx-auto" />
-          <p className="text-sm text-muted-foreground mt-3">Redirecting...</p>
-        </div>
+        <Loader2 className="h-8 w-8 animate-spin text-vivid-blue" />
       </div>
     )
   }

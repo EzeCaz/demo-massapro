@@ -7,6 +7,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // Header
     'header.brand': 'MassaPro',
     'header.admin': 'Admin Panel',
+    'header.reports': 'Reports',
     'header.dashboard': 'Dashboard',
     'header.logout': 'Logout',
     'header.welcome': 'Welcome',
@@ -305,6 +306,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // Header
     'header.brand': 'MassaPro',
     'header.admin': 'Panel de Admin',
+    'header.reports': 'Reportes',
     'header.dashboard': 'Panel',
     'header.logout': 'Cerrar Sesión',
     'header.welcome': 'Bienvenido',
@@ -607,6 +609,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // Header essentials
     'header.brand': 'מאספרו',
     'header.admin': 'פאנל אדמין',
+    'header.reports': 'דוחות',
     'header.dashboard': 'לוח בקרה',
     'header.logout': 'התנתק',
     'header.welcome': 'ברוכים הבאים',

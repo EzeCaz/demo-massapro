@@ -36,6 +36,10 @@ export default function AdminPanel() {
   const { data: session } = useSession()
   const currentUserRole = (session?.user as any)?.role
   const isSuperAdmin = currentUserRole === 'super_admin'
+  // Admin (or super_admin) — users who can perform mutating actions
+  // (edit clients, create invites, bulk upload users). Regular users see
+  // the same data read-only. Per Task 18.
+  const isAdmin = isSuperAdmin || currentUserRole === 'admin'
 
   // Client management state
   const [editingClientId, setEditingClientId] = useState<string | null>(null)
@@ -219,7 +223,9 @@ export default function AdminPanel() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="clients" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        {/* Tabs list — admin/super_admin see all 5 tabs; regular users see
+            only Clients + Scenarios + Export (the read-only reports). */}
+        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-5' : 'grid-cols-3'}`}>
           <TabsTrigger value="clients" className="text-xs sm:text-sm">
             <Users className="h-4 w-4 mr-1 sm:mr-2" />
             {t('admin.clients')}
@@ -228,14 +234,18 @@ export default function AdminPanel() {
             <FileText className="h-4 w-4 mr-1 sm:mr-2" />
             {t('admin.scenarios')}
           </TabsTrigger>
-          <TabsTrigger value="invites" className="text-xs sm:text-sm">
-            <Mail className="h-4 w-4 mr-1 sm:mr-2" />
-            {t('admin.invites')}
-          </TabsTrigger>
-          <TabsTrigger value="upload" className="text-xs sm:text-sm">
-            <Upload className="h-4 w-4 mr-1 sm:mr-2" />
-            {t('upload.title')}
-          </TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="invites" className="text-xs sm:text-sm">
+              <Mail className="h-4 w-4 mr-1 sm:mr-2" />
+              {t('admin.invites')}
+            </TabsTrigger>
+          )}
+          {isAdmin && (
+            <TabsTrigger value="upload" className="text-xs sm:text-sm">
+              <Upload className="h-4 w-4 mr-1 sm:mr-2" />
+              {t('upload.title')}
+            </TabsTrigger>
+          )}
           <TabsTrigger value="export" className="text-xs sm:text-sm">
             <Download className="h-4 w-4 mr-1 sm:mr-2" />
             {t('admin.export')}
@@ -289,6 +299,7 @@ export default function AdminPanel() {
                             onDelete={() => deleteClientMutation.mutate(client.id)}
                             saving={updateClientMutation.isPending}
                             isSuperAdmin={isSuperAdmin}
+                            isAdmin={isAdmin}
                           />
                         ))}
                       </div>
@@ -314,6 +325,7 @@ export default function AdminPanel() {
                       onDelete={() => deleteClientMutation.mutate(client.id)}
                       saving={updateClientMutation.isPending}
                       isSuperAdmin={isSuperAdmin}
+                      isAdmin={isAdmin}
                     />
                   ))}
                 </div>
@@ -437,22 +449,24 @@ export default function AdminPanel() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={e => {
-                          e.stopPropagation()
-                          setNoteForm({
-                            scenarioId: scenario.id,
-                            clientId: scenario.clientId,
-                            note: '',
-                          })
-                          setNoteDialogOpen(true)
-                        }}
-                        title={t('admin.addNote')}
-                      >
-                        <StickyNote className="h-4 w-4" />
-                      </Button>
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={e => {
+                            e.stopPropagation()
+                            setNoteForm({
+                              scenarioId: scenario.id,
+                              clientId: scenario.clientId,
+                              note: '',
+                            })
+                            setNoteDialogOpen(true)
+                          }}
+                          title={t('admin.addNote')}
+                        >
+                          <StickyNote className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -529,7 +543,8 @@ export default function AdminPanel() {
           </div>
         </TabsContent>
 
-        {/* INVITES TAB */}
+        {/* INVITES TAB — admin/super_admin only */}
+        {isAdmin && (
         <TabsContent value="invites" className="mt-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Create Invite */}
@@ -651,11 +666,14 @@ export default function AdminPanel() {
             </Card>
           </div>
         </TabsContent>
+        )}
 
-        {/* UPLOAD TAB */}
+        {/* UPLOAD TAB — admin/super_admin only */}
+        {isAdmin && (
         <TabsContent value="upload" className="mt-4">
           <BulkUpload />
         </TabsContent>
+        )}
 
         {/* EXPORT TAB */}
         <TabsContent value="export" className="mt-4">
@@ -703,6 +721,7 @@ function ClientRow({
   onDelete,
   saving,
   isSuperAdmin,
+  isAdmin,
 }: {
   client: any
   editingId: string | null
@@ -714,15 +733,19 @@ function ClientRow({
   onDelete: () => void
   saving: boolean
   isSuperAdmin: boolean
+  isAdmin: boolean
 }) {
   const isEditing = editingId === client.id
   const isSuperAdminUser = client.role === 'super_admin'
   const isAdminUser = client.role === 'admin'
 
-  // Super admin users cannot be edited or deleted
-  // Admin users can only be edited/deleted by super_admin
-  const canEdit = !isSuperAdminUser && (isSuperAdmin || !isAdminUser)
-  const canDelete = !isSuperAdminUser && (isSuperAdmin || !isAdminUser)
+  // Super admin users cannot be edited or deleted by anyone.
+  // Admin users can only be edited/deleted by super_admin.
+  // Regular users can be edited/deleted by admin or super_admin.
+  // Non-admin viewers (regular users viewing the Reports page) cannot
+  // edit or delete anyone — read-only view.
+  const canEdit = isAdmin && !isSuperAdminUser && (isSuperAdmin || !isAdminUser)
+  const canDelete = isAdmin && !isSuperAdminUser && (isSuperAdmin || !isAdminUser)
 
   return (
     <div className="flex items-center gap-2 p-2 border rounded-md">

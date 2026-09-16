@@ -3,6 +3,11 @@ import { getServerSession } from 'next-auth'
 import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 
+// GET /api/admin/scenarios — list ALL scenarios across ALL clients.
+//
+// Per Task 18: all authenticated non-share users can read this list to
+// populate the Reports dashboard. (Mutations on individual scenarios
+// remain gated by their own /api/scenarios/[id] routes.)
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -10,11 +15,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Reject share-token sessions — they have no business listing all scenarios.
     const userRole = (session.user as any).role
-    if (!isAdminRole(userRole)) {
+    if (userRole === 'share') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    // For admin / super_admin: return ALL scenarios.
+    // For regular 'user' role: also return ALL scenarios (per Task 18 — the
+    // Reports dashboard is shared company-wide). If you want to restrict
+    // regular users to only their own scenarios in the future, swap the
+    // `where` below to filter by clientId.
     const scenarios = await db.scenario.findMany({
       orderBy: { updatedAt: 'desc' },
       include: {

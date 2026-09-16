@@ -3,6 +3,11 @@ import { getServerSession } from 'next-auth'
 import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 
+// GET /api/admin/clients — list all clients + their scenarios.
+//
+// Per Task 18: all authenticated users (including regular 'user' role)
+// can READ this data so they can see the Reports dashboard. Mutating
+// routes (PUT/DELETE) below remain admin/super_admin-only.
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -10,8 +15,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Reject share-token sessions — they have no business listing clients.
     const userRole = (session.user as any).role
-    if (!isAdminRole(userRole)) {
+    if (userRole === 'share') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

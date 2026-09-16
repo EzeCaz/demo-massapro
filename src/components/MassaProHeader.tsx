@@ -2,7 +2,7 @@
 
 import { useLanguage } from '@/hooks/useLanguage'
 import { signOut, useSession } from 'next-auth/react'
-import { Globe, LogOut, Shield, LayoutDashboard, Crown, Plug } from 'lucide-react'
+import { Globe, LogOut, Shield, LayoutDashboard, Crown, Plug, BarChart3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -42,31 +42,43 @@ export default function MassaProHeader() {
 
           {/* Right: Nav + Language + User */}
           <div className="flex items-center gap-2 sm:gap-4">
-            {/* View Toggle (Admin) */}
-            {(userRole === 'admin' || userRole === 'super_admin') && (
-              <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1">
-                <Link href="/admin">
-                  <Button
-                    variant={pathname === '/admin' ? 'default' : 'ghost'}
-                    size="sm"
-                    className={`text-xs sm:text-sm ${pathname === '/admin' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
-                  >
+            {/* View Toggle — visible to all authenticated users.
+                Per Task 18: the link goes to /admin for everyone, but the
+                LABEL depends on role:
+                  - super_admin: "Admin Panel" (Shield icon) — they keep
+                    full management powers inside the page.
+                  - admin + user: "Reports" (BarChart3 icon) — they see
+                    the same dashboard view but with mutation controls
+                    hidden (the AdminPanel component enforces this).
+                The "Admin Panel" name is reserved for super_admin only. */}
+            <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1">
+              <Link href="/admin">
+                <Button
+                  variant={pathname === '/admin' ? 'default' : 'ghost'}
+                  size="sm"
+                  className={`text-xs sm:text-sm ${pathname === '/admin' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+                >
+                  {userRole === 'super_admin' ? (
                     <Shield className="h-4 w-4 mr-1" />
-                    <span className="hidden sm:inline">{t('header.admin')}</span>
-                  </Button>
-                </Link>
-                <Link href="/dashboard">
-                  <Button
-                    variant={pathname === '/dashboard' ? 'default' : 'ghost'}
-                    size="sm"
-                    className={`text-xs sm:text-sm ${pathname === '/dashboard' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
-                  >
-                    <LayoutDashboard className="h-4 w-4 mr-1" />
-                    <span className="hidden sm:inline">{t('header.dashboard')}</span>
-                  </Button>
-                </Link>
-              </div>
-            )}
+                  ) : (
+                    <BarChart3 className="h-4 w-4 mr-1" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {userRole === 'super_admin' ? t('header.admin') : t('header.reports')}
+                  </span>
+                </Button>
+              </Link>
+              <Link href="/dashboard">
+                <Button
+                  variant={pathname === '/dashboard' ? 'default' : 'ghost'}
+                  size="sm"
+                  className={`text-xs sm:text-sm ${pathname === '/dashboard' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+                >
+                  <LayoutDashboard className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">{t('header.dashboard')}</span>
+                </Button>
+              </Link>
+            </div>
 
             {/* Integration Setup nav link — visible to all authenticated users */}
             <Link href="/integration-setup">
