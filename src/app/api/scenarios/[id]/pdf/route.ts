@@ -33,6 +33,23 @@ export async function GET(
       include: {
         client: { select: { id: true, name: true, email: true, company: true } },
         kpis: true,
+        // Attachments metadata only — deliberately NOT selecting the heavy
+        // 'data' bytes column (up to 4MB per file); the PDF only lists files.
+        attachments: {
+          select: {
+            id: true,
+            fileName: true,
+            fileType: true,
+            fileSize: true,
+            category: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+        links: {
+          select: { id: true, name: true, url: true, description: true },
+          orderBy: { createdAt: 'asc' },
+        },
       },
     })
 
@@ -479,6 +496,129 @@ export async function GET(
         doc.x = MARGIN
       })
       doc.moveDown(0.8)
+    }
+
+    // ===== ATTACHMENTS (uploaded files — .md, .pdf, audio, etc.) =====
+    // File names are original (not translated), so this section appears
+    // identically in every language variant of the PDF.
+    if (scenario.attachments && scenario.attachments.length > 0) {
+      if (doc.y > 680) doc.addPage()
+      doc.x = MARGIN
+      doc.font('Helvetica-Bold').fontSize(12).fillColor(darkGray)
+      doc.text('12. Attachments', MARGIN, doc.y, {
+        continued: false,
+        align: 'left',
+        width: CONTENT_WIDTH,
+      })
+      doc.moveDown(0.3)
+
+      const formatFileSize = (bytes?: number | null): string => {
+        if (!bytes || bytes <= 0) return ''
+        if (bytes < 1024) return `${bytes} B`
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+      }
+
+      scenario.attachments.forEach((att: any) => {
+        if (doc.y > MAX_CONTENT_Y) doc.addPage()
+
+        const metaParts: string[] = []
+        const sizeStr = formatFileSize(att.fileSize)
+        if (sizeStr) metaParts.push(sizeStr)
+        if (att.category === 'knowledge_base') metaParts.push('Knowledge Base')
+        const meta = metaParts.length > 0 ? ` (${metaParts.join(', ')})` : ''
+
+        const attIsRTL = containsRTL(att.fileName || '')
+        if (attIsRTL) {
+          // Hebrew file name — render bullet + name word-by-word RTL
+          // (drawRTLText handles wrapping and page breaks), then put the
+          // LTR metadata (size/category) on its own indented line below to
+          // avoid mixed bidi issues on one line.
+          drawRTLText(`\u2022 ${att.fileName}`, 'DejaVuSans', 10, bodyGray, CONTENT_WIDTH, 3)
+          if (meta) {
+            if (doc.y > MAX_CONTENT_Y) doc.addPage()
+            doc.x = MARGIN
+            doc.font('Helvetica').fontSize(9).fillColor(lightGray)
+            doc.text(`    ${metaParts.join(' \u00b7 ')}`, MARGIN, doc.y, {
+              align: 'left',
+              width: CONTENT_WIDTH,
+            })
+          }
+        } else {
+          doc.x = MARGIN
+          doc.font('Helvetica').fontSize(10).fillColor(bodyGray)
+          doc.text(`\u2022 ${att.fileName}${meta}`, MARGIN, doc.y, {
+            align: 'left',
+            width: CONTENT_WIDTH,
+          })
+        }
+        doc.x = MARGIN
+      })
+      doc.moveDown(0.8)
+    }
+
+    // ===== EXTERNAL URL LINKS =====
+    // Link names/descriptions are original (not translated), so this
+    // section appears identically in every language variant of the PDF.
+    if (scenario.links && scenario.links.length > 0) {
+      if (doc.y > 680) doc.addPage()
+      doc.x = MARGIN
+      doc.font('Helvetica-Bold').fontSize(12).fillColor(darkGray)
+      doc.text('13. External Links', MARGIN, doc.y, {
+        continued: false,
+        align: 'left',
+        width: CONTENT_WIDTH,
+      })
+      doc.moveDown(0.3)
+
+      scenario.links.forEach((link: any) => {
+        // Link name (bold, bulleted) — RTL-aware
+        if (doc.y > MAX_CONTENT_Y) doc.addPage()
+        const nameIsRTL = containsRTL(link.name || '')
+        if (nameIsRTL) {
+          drawRTLText(`\u2022 ${link.name}`, 'DejaVuSans-Bold', 10, darkGray, CONTENT_WIDTH, 3)
+        } else {
+          doc.x = MARGIN
+          doc.font('Helvetica-Bold').fontSize(10).fillColor(darkGray)
+          doc.text(`\u2022 ${link.name}`, MARGIN, doc.y, {
+            align: 'left',
+            width: CONTENT_WIDTH,
+          })
+        }
+
+        // URL — always LTR, indented, purple, clickable in the PDF
+        if (doc.y > MAX_CONTENT_Y) doc.addPage()
+        const linkUrl: string =
+          /^https?:\/\//i.test(link.url || '') ? link.url : `https://${link.url}`
+        doc.x = MARGIN
+        doc.font('Helvetica').fontSize(9).fillColor(purple)
+        doc.text(`    ${link.url}`, MARGIN, doc.y, {
+          align: 'left',
+          width: CONTENT_WIDTH,
+          link: linkUrl,
+        })
+
+        // Short description (if provided) — RTL-aware, gray
+        if (link.description && String(link.description).trim() !== '') {
+          if (doc.y > MAX_CONTENT_Y) doc.addPage()
+          const descIsRTL = containsRTL(link.description)
+          if (descIsRTL) {
+            drawRTLText(link.description, 'DejaVuSans', 9, bodyGray, CONTENT_WIDTH, 3)
+          } else {
+            doc.x = MARGIN
+            doc.font('Helvetica').fontSize(9).fillColor(bodyGray)
+            doc.text(`    ${link.description}`, MARGIN, doc.y, {
+              align: 'left',
+              width: CONTENT_WIDTH,
+            })
+          }
+        }
+
+        // Small gap between link entries
+        doc.moveDown(0.4)
+        doc.x = MARGIN
+      })
+      doc.moveDown(0.4)
     }
 
     // Final separator
