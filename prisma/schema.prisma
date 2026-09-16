@@ -251,6 +251,29 @@ model IntegrationSetup {
   ticketingRequirementsEn               String?
   ticketingRequirementsEs               String?
   ticketingRequirementsHe               String?
+
+  // Magic-link shares for this setup. Each row grants a specific email
+  // access to view/edit this single setup without a password — the magic
+  // link contains the token and signs them in via NextAuth's signIn
+  // callback (which looks up the share by token).
+  shares                                IntegrationSetupShare[]
+}
+
+// Magic-link share of a single Integration Setup with a single external
+// user identified by email. The recipient doesn't need a password or a
+// prior account — visiting /s/[token] signs them in with a JWT that
+// scopes them to only the setups/scenarios their email has shares for.
+model IntegrationSetupShare {
+  id          String   @id @default(cuid())
+  setupId     String
+  setup       IntegrationSetup @relation(fields: [setupId], references: [id], onDelete: Cascade)
+  email       String   // recipient email (lowercased on write by the API)
+  token       String   @unique // uuid v4 — the magic-link secret
+  accessLevel String   @default("view") // "view" or "edit"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([setupId, email]) // one active share per (setup, email) pair
 }
 
 model Attachment {

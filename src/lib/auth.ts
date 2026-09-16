@@ -29,8 +29,47 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
+        // Magic-link sign-in: the client sends the share token instead of
+        // a password. We treat a non-empty `magicToken` as a request to
+        // sign in via share token (the email field is then ignored — we
+        // trust the email stored on the share row).
+        magicToken: { label: 'Magic Token', type: 'text' },
       },
       async authorize(credentials) {
+        // ===== Magic-link path =====
+        // The user arrived via /s/[token]. We look up the share by token,
+        // and if found, sign them in as a virtual "share user" with
+        // shareEmail + shareTokenId on the user object. The JWT/session
+        // callbacks propagate these so API routes can enforce scope.
+        if (credentials?.magicToken) {
+          const token = credentials.magicToken.trim()
+          const share = await db.integrationSetupShare.findUnique({
+            where: { token },
+            include: { setup: { select: { id: true, name: true, clientId: true } } },
+          })
+          if (!share) {
+            throw new Error('Invalid or expired link')
+          }
+          // Return a virtual user object keyed by email. The `id` field is
+          // synthetic (not a User row) so we use the share id as a stable
+          // identifier — the JWT callback stores `userId = share.id` only
+          // for share users, and the integration-setups API recognizes
+          // this case via `shareEmail` being non-null.
+          return {
+            id: `share:${share.id}`,
+            email: share.email,
+            name: null,
+            role: 'share', // sentinel role — has no admin/owner privileges anywhere
+            company: null,
+            // Custom fields consumed by the jwt callback:
+            shareEmail: share.email,
+            shareTokenId: share.id,
+            shareSetupId: share.setupId,
+            shareAccessLevel: share.accessLevel,
+          } as any
+        }
+
+        // ===== Regular credentials path (unchanged) =====
         if (!credentials?.email || !credentials?.password) {
           throw new Error('Email and password are required')
         }
@@ -137,6 +176,16 @@ export const authOptions: NextAuthOptions = {
         token.userRole = userData.role as string
         token.userCompany = userData.company as string
         token.userId = user.id
+
+        // Magic-link share sign-in: propagate share-scoping fields so
+        // API routes can check whether the session is share-scoped and
+        // which setup + access level it grants. The role is 'share' which
+        // has no admin/owner privileges anywhere.
+        if (userData.role === 'share') {
+          token.shareEmail = userData.shareEmail as string
+          token.shareSetupId = userData.shareSetupId as string
+          token.shareAccessLevel = userData.shareAccessLevel as string
+        }
       }
       return token
     },
@@ -147,6 +196,13 @@ export const authOptions: NextAuthOptions = {
         sessionUser.role = token.userRole
         sessionUser.company = token.userCompany
         sessionUser.id = token.userId
+
+        // Share-scoping fields (only present for magic-link users)
+        if (token.userRole === 'share') {
+          sessionUser.shareEmail = token.shareEmail
+          sessionUser.shareSetupId = token.shareSetupId
+          sessionUser.shareAccessLevel = token.shareAccessLevel
+        }
       }
       return session
     },

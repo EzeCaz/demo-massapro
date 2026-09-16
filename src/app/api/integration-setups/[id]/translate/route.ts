@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions, isAdminRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { translateText } from '@/lib/translate'
+import { readShareScope } from '@/lib/share-scope'
 
 // POST /api/integration-setups/[id]/translate
 // Body: { fields: string[], direction: 'es-to-en' | 'en-to-es' | 'he-to-en' | 'en-to-he' | 'es-to-he' | 'he-to-es' }
@@ -27,10 +28,19 @@ export async function POST(
       return NextResponse.json({ error: 'Integration setup not found' }, { status: 404 })
     }
 
-    // Permission: admin or owner
+    // Permission: admin, owner, or share editor (view-only shares cannot
+    // translate because that would write En/Es/He variants).
     const userId = (session.user as any).id
     const userRole = (session.user as any).role
-    if (!isAdminRole(userRole) && setup.clientId !== userId) {
+    const scope = readShareScope(session.user as any)
+    if (scope.isShare) {
+      if (scope.setupId !== id) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+      if (scope.accessLevel !== 'edit') {
+        return NextResponse.json({ error: 'View-only access' }, { status: 403 })
+      }
+    } else if (!isAdminRole(userRole) && setup.clientId !== userId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
