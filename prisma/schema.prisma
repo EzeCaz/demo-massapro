@@ -17,6 +17,7 @@ model User {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   scenarios           Scenario[]
+  integrationSetups   IntegrationSetup[]
   collaborations      Collaboration[]
   comments            ScenarioComment[]
   changeLogs          ChangeLog[]
@@ -93,6 +94,163 @@ model KPI {
   targetValue String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// Integration Setup form — mirrors the demo scenario's multi-language pattern:
+// each text field has a base variant + English/Spanish/Hebrew variants.
+// The base variant is edited in the main form; En/Es/He are populated via
+// the translation endpoint and used by the (future) PDF export via ?lang=.
+model IntegrationSetup {
+  id                                    String    @id @default(cuid())
+  clientId                              String
+  client                                User      @relation(fields: [clientId], references: [id])
+  name                                  String
+  status                                String    @default("draft") // "draft" or "submitted"
+  submittedDate                         DateTime?
+  createdAt                             DateTime  @default(now())
+  updatedAt                             DateTime  @updatedAt
+
+  // 28 fields, each with base + En + Es + He variants.
+  // Field names use camelCase, suffixes are En/Es/He.
+  languagesToUse                        String?
+  languagesToUseEn                      String?
+  languagesToUseEs                      String?
+  languagesToUseHe                      String?
+
+  telNumbers                            String?
+  telNumbersEn                          String?
+  telNumbersEs                          String?
+  telNumbersHe                          String?
+
+  queueSkills                           String?
+  queueSkillsEn                         String?
+  queueSkillsEs                         String?
+  queueSkillsHe                         String?
+
+  portedOrWhitelisted                   String?
+  portedOrWhitelistedEn                 String?
+  portedOrWhitelistedEs                 String?
+  portedOrWhitelistedHe                 String?
+
+  campaignStructure                     String?
+  campaignStructureEn                   String?
+  campaignStructureEs                   String?
+  campaignStructureHe                   String?
+
+  crmDbAccess                           String?
+  crmDbAccessEn                         String?
+  crmDbAccessEs                         String?
+  crmDbAccessHe                         String?
+
+  integrationsNeeded                    String?
+  integrationsNeededEn                  String?
+  integrationsNeededEs                  String?
+  integrationsNeededHe                  String?
+
+  waitingPriority                       String?
+  waitingPriorityEn                     String?
+  waitingPriorityEs                     String?
+  waitingPriorityHe                     String?
+
+  autoDialer                            String?
+  autoDialerEn                          String?
+  autoDialerEs                          String?
+  autoDialerHe                          String?
+
+  omniSetup                             String?
+  omniSetupEn                           String?
+  omniSetupEs                           String?
+  omniSetupHe                           String?
+
+  reportsRequired                       String?
+  reportsRequiredEn                     String?
+  reportsRequiredEs                     String?
+  reportsRequiredHe                     String?
+
+  customerDataStorage                   String?
+  customerDataStorageEn                 String?
+  customerDataStorageEs                 String?
+  customerDataStorageHe                 String?
+
+  initialDataImport                     String?
+  initialDataImportEn                   String?
+  initialDataImportEs                   String?
+  initialDataImportHe                   String?
+
+  voiceUsersCount                       String?
+  voiceUsersCountEn                     String?
+  voiceUsersCountEs                     String?
+  voiceUsersCountHe                     String?
+
+  phoneNumberRequirements               String?
+  phoneNumberRequirementsEn             String?
+  phoneNumberRequirementsEs             String?
+  phoneNumberRequirementsHe             String?
+
+  sipTrunkSetup                         String?
+  sipTrunkSetupEn                       String?
+  sipTrunkSetupEs                       String?
+  sipTrunkSetupHe                       String?
+
+  sipTrunkConfig                        String?
+  sipTrunkConfigEn                      String?
+  sipTrunkConfigEs                      String?
+  sipTrunkConfigHe                      String?
+
+  diallerCampaign                       String?
+  diallerCampaignEn                     String?
+  diallerCampaignEs                     String?
+  diallerCampaignHe                     String?
+
+  leadsPerDay                           String?
+  leadsPerDayEn                         String?
+  leadsPerDayEs                         String?
+  leadsPerDayHe                         String?
+
+  inboundVoiceQueue                     String?
+  inboundVoiceQueueEn                   String?
+  inboundVoiceQueueEs                   String?
+  inboundVoiceQueueHe                   String?
+
+  inboundCallsPerDay                    String?
+  inboundCallsPerDayEn                  String?
+  inboundCallsPerDayEs                  String?
+  inboundCallsPerDayHe                  String?
+
+  ivrFlow                               String?
+  ivrFlowEn                             String?
+  ivrFlowEs                             String?
+  ivrFlowHe                             String?
+
+  outOfHoursRouting                     String?
+  outOfHoursRoutingEn                   String?
+  outOfHoursRoutingEs                   String?
+  outOfHoursRoutingHe                   String?
+
+  emailRequirements                     String?
+  emailRequirementsEn                   String?
+  emailRequirementsEs                   String?
+  emailRequirementsHe                   String?
+
+  whatsappRequirements                  String?
+  whatsappRequirementsEn                String?
+  whatsappRequirementsEs                String?
+  whatsappRequirementsHe                String?
+
+  smsRequirements                        String?
+  smsRequirementsEn                     String?
+  smsRequirementsEs                     String?
+  smsRequirementsHe                     String?
+
+  facebookInstagramRequirements         String?
+  facebookInstagramRequirementsEn       String?
+  facebookInstagramRequirementsEs       String?
+  facebookInstagramRequirementsHe       String?
+
+  ticketingRequirements                 String?
+  ticketingRequirementsEn               String?
+  ticketingRequirementsEs               String?
+  ticketingRequirementsHe               String?
 }
 
 model Attachment {

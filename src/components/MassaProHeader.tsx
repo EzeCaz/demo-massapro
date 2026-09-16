@@ -2,7 +2,7 @@
 
 import { useLanguage } from '@/hooks/useLanguage'
 import { signOut, useSession } from 'next-auth/react'
-import { Globe, LogOut, Shield, LayoutDashboard, Crown } from 'lucide-react'
+import { Globe, LogOut, Shield, LayoutDashboard, Crown, Plug } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -68,6 +68,18 @@ export default function MassaProHeader() {
               </div>
             )}
 
+            {/* Integration Setup nav link — visible to all authenticated users */}
+            <Link href="/integration-setup">
+              <Button
+                variant={pathname?.startsWith('/integration-setup') ? 'default' : 'ghost'}
+                size="sm"
+                className={`text-xs sm:text-sm ${pathname?.startsWith('/integration-setup') ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+              >
+                <Plug className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">{t('integration.title')}</span>
+              </Button>
+            </Link>
+
             {/* Language Switcher */}
             <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1">
               <Button
@@ -85,6 +97,15 @@ export default function MassaProHeader() {
                 className={`text-xs px-2 py-1 ${language === 'es' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
               >
                 ES
+              </Button>
+              <Button
+                variant={language === 'he' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setLanguage('he')}
+                className={`text-xs px-2 py-1 ${language === 'he' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+                title="עברית"
+              >
+                עב
               </Button>
             </div>
 
