@@ -7,15 +7,17 @@ import {
   CATEGORY_LABELS,
   brandClean,
   STATUS_LABELS,
+  DEFAULT_MILESTONES,
   type ServiceCategory,
   type ServiceTask,
   type TaskStatus,
   type Service,
+  type MilestoneRow,
 } from '@/lib/sow-data'
 import { exportSowWord, type SOWCoverInfo, type SOWTaskState, type SOWSpecValue, type CustomService } from '@/lib/sow-export'
 import {
-  Phone, Zap, Workflow, Moon, ListOrdered, MessageCircle, Smartphone, Mail, Share2, Ticket,
-  Network, Database, BarChart3, Upload, HardDrive, ShieldCheck, GraduationCap,
+  Phone, Smartphone, Mail, MessageSquare, MessageCircle, Share2, Instagram, Twitter,
+  LayoutDashboard, Award, ClipboardCheck, Bot, Volume2, Mic, Plug, GraduationCap,
   Plus, Trash2, Download, RotateCcw, Save, FileText, CheckCircle2, Clock, Circle, XCircle,
   Filter, Settings, ChevronDown, ChevronRight, Pencil, X, Sparkles, Layout,
 } from 'lucide-react'
@@ -46,8 +48,9 @@ const MASSAPRO_LOGO_URL =
 // Icon mapping — service.icon (string) → lucide-react component
 // ---------------------------------------------------------------------------
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  Phone, Zap, Workflow, Moon, ListOrdered, MessageCircle, Smartphone, Mail, Share2, Ticket,
-  Network, Database, BarChart3, Upload, HardDrive, ShieldCheck, GraduationCap,
+  Phone, Smartphone, Mail, MessageSquare, MessageCircle, Share2, Instagram, Twitter,
+  LayoutDashboard, Award, ClipboardCheck, Bot, Volume2, Mic, Plug, GraduationCap,
+  Sparkles, // fallback for custom services
 }
 
 // ---------------------------------------------------------------------------
@@ -242,18 +245,31 @@ export default function SOWBuilder() {
   // setCustomTasksRegistry without temporal-dead-zone issues.
   const [customTasksRegistry, setCustomTasksRegistry] = useState<Record<string, ServiceTask[]>>({})
 
-  // Load custom tasks registry from localStorage
+  // ---- Milestones — editable version of DEFAULT_MILESTONES ----------
+  const [milestones, setMilestones] = useState<MilestoneRow[]>(DEFAULT_MILESTONES)
+
+  // Load custom tasks registry + milestones from localStorage
   useEffect(() => {
     if (!hydrated) return
     try {
-      const raw = localStorage.getItem(STORAGE_KEY + '-custom-tasks')
-      if (raw) setCustomTasksRegistry(JSON.parse(raw))
+      const rawTasks = localStorage.getItem(STORAGE_KEY + '-custom-tasks')
+      if (rawTasks) setCustomTasksRegistry(JSON.parse(rawTasks))
+      const rawMilestones = localStorage.getItem(STORAGE_KEY + '-milestones')
+      if (rawMilestones) setMilestones(JSON.parse(rawMilestones))
     } catch {}
   }, [hydrated])
   useEffect(() => {
     if (!hydrated) return
     localStorage.setItem(STORAGE_KEY + '-custom-tasks', JSON.stringify(customTasksRegistry))
   }, [customTasksRegistry, hydrated])
+  useEffect(() => {
+    if (!hydrated) return
+    localStorage.setItem(STORAGE_KEY + '-milestones', JSON.stringify(milestones))
+  }, [milestones, hydrated])
+
+  const updateMilestone = useCallback((id: string, field: keyof MilestoneRow, value: string) => {
+    setMilestones((prev) => prev.map((m) => (m.id === id ? { ...m, [field]: value } : m)))
+  }, [])
 
   // ---- Add custom task -------------------------------------------------
   const addCustomTask = useCallback(() => {
@@ -370,6 +386,7 @@ export default function SOWBuilder() {
     if (!window.confirm(t('sow.export.resetConfirm'))) return
     setState(DEFAULT_STATE)
     setCustomTasksRegistry({})
+    setMilestones(DEFAULT_MILESTONES)
     setActiveServiceFilter('all')
     setActiveStatusFilter('all')
     toast.success('SOW reset to defaults')
@@ -392,6 +409,7 @@ export default function SOWBuilder() {
               ([sid]) => state.selectedServiceIds.includes(sid) && !state.customServices.some((cs) => cs.id === sid)
             )
           ),
+          milestones,
         },
         MASSAPRO_LOGO_URL
       )
@@ -400,7 +418,7 @@ export default function SOWBuilder() {
       console.error(err)
       toast.error('Export failed: ' + (err?.message || 'unknown error'))
     }
-  }, [state, customTasksRegistry])
+  }, [state, customTasksRegistry, milestones])
 
   // ---- Toggle task expansion ------------------------------------------
   const toggleExpand = useCallback((taskId: string) => {
@@ -411,16 +429,15 @@ export default function SOWBuilder() {
   const servicesByCategory = useMemo(() => {
     const map: Record<ServiceCategory, Service[]> = {
       channel: [],
-      voice: [],
+      productivity: [],
       infrastructure: [],
-      data: [],
       ops: [],
     }
     SERVICES.forEach((s) => map[s.category].push(s))
     return map
   }, [])
 
-  const categoryOrder: ServiceCategory[] = ['channel', 'voice', 'infrastructure', 'data', 'ops']
+  const categoryOrder: ServiceCategory[] = ['channel', 'productivity', 'infrastructure', 'ops']
 
   // --------------------------------------------------------------------
   // Render
@@ -1172,6 +1189,69 @@ export default function SOWBuilder() {
                 </div>
               ))
             )}
+          </CardContent>
+        </Card>
+
+        {/* ====== Project Milestones ====== */}
+        <Card style={{ borderColor: LAVENDER }}>
+          <CardHeader style={{ borderBottom: `2px solid ${LAVENDER}` }}>
+            <CardTitle className="flex items-center gap-2" style={{ color: ORCHID }}>
+              <CheckCircle2 className="h-5 w-5" />
+              {t('sow.section.milestones')}
+            </CardTitle>
+            <CardDescription>
+              {language === 'es'
+                ? 'Edita las fechas objetivo y el estado de cada hito.'
+                : language === 'he'
+                  ? 'ערוך את תאריכי היעד והסטטוס של כל אבן דרך.'
+                  : 'Edit the target dates and status of each milestone.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="rounded-lg border-2 overflow-hidden" style={{ borderColor: LAVENDER }}>
+              <div
+                className="grid grid-cols-12 text-xs font-semibold uppercase tracking-wide p-2"
+                style={{ background: LAVENDER, color: JET }}
+              >
+                <div className="col-span-6">{t('sow.tasks.customTitle')}</div>
+                <div className="col-span-3">{t('sow.tasks.dueDate')}</div>
+                <div className="col-span-3">{t('sow.tasks.status')}</div>
+              </div>
+              {milestones.map((m) => (
+                <div
+                  key={m.id}
+                  className="grid grid-cols-12 gap-2 p-2 border-t items-center"
+                  style={{ borderColor: LAVENDER, background: WHITE }}
+                >
+                  <div className="col-span-6">
+                    <Input
+                      value={m.task}
+                      onChange={(e) => updateMilestone(m.id, 'task', e.target.value)}
+                      className="h-8 text-sm"
+                      style={{ borderColor: LAVENDER }}
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <Input
+                      value={m.targetDate}
+                      onChange={(e) => updateMilestone(m.id, 'targetDate', e.target.value)}
+                      placeholder="XX/XX/2026"
+                      className="h-8 text-sm"
+                      style={{ borderColor: LAVENDER }}
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <Input
+                      value={m.status}
+                      onChange={(e) => updateMilestone(m.id, 'status', e.target.value)}
+                      placeholder="Pending / Scheduled / Complete"
+                      className="h-8 text-sm"
+                      style={{ borderColor: LAVENDER }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
 

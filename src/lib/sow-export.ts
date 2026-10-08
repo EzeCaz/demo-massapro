@@ -1,13 +1,20 @@
 // Word (.docx) export for the MassaPro SOW Builder.
 //
 // Builds a branded SOW document and triggers a browser download using
-// the `docx` library. The doc includes:
-//   - Cover page with MassaPro logo, title, cover-info table
-//   - Project Overview section
-//   - Scope of Services (bullet list)
-//   - Technical Specifications (table per selected service)
-//   - Project Tasks (one big table with status / owner / due date / notes)
-//   - Signatures block
+// the `docx` library. Layout follows the original Connex SOW template
+// (uploaded by the user as "Massapro- Statement of Work.pdf"), rebranded
+// Connex → MassaPro per the brand book.
+//
+// Sections in the .docx:
+//   1. Cover page — MassaPro logo, title, cover-info table
+//   2. Welcome page — intro paragraphs, benefits list, closing, retention
+//   3. Project Overview — overview paragraph + Phase 1 deliverables list
+//   4. Scope — per-service section: intro + Configuration + Requirements
+//   5. Configuration Tracker — single table with status / owner / due / notes
+//   6. Infrastructure & Access Requirements (pre-deployment, hardware, internet)
+//   7. Support — 24/7 support, support portal, ticket template
+//   8. Project Milestones — Connex-template default milestones table
+//   9. Signatures — authorized signatories table
 //
 // Brand colors (MassaPro Brand Book):
 //   Orchid Purple  #9333EA   (primary accent, headers, button-equivalents)
@@ -15,7 +22,7 @@
 //   Jet Black      #030712   (body text)
 //   Soft Lavender  #F3E8FF   (subtle table header fill)
 //
-// Font: sans-serif (Calibri / Inter in Word — both are sans-serif).
+// Font: sans-serif (Calibri in Word — sans-serif).
 
 import {
   Document,
@@ -47,7 +54,13 @@ import {
   type ServiceTask,
   type TaskStatus,
   type ServiceCategory,
+  type Service,
   STATUS_LABELS,
+  INFRA_REQUIREMENTS,
+  SUPPORT_SECTIONS,
+  WELCOME_PARAGRAPHS,
+  DEFAULT_MILESTONES,
+  type MilestoneRow,
 } from '@/lib/sow-data'
 
 export interface SOWCoverInfo {
@@ -92,6 +105,8 @@ export interface SOWExportPayload {
   // Tasks the user added on top of a builtin service (not its own custom service).
   // Keyed by builtin service id; values are the extra tasks to merge in.
   customTasksByBuiltinService?: Record<string, ServiceTask[]>
+  // Optional milestone overrides (same shape as DEFAULT_MILESTONES).
+  milestones?: MilestoneRow[]
 }
 
 // ---------------------------------------------------------------------------
@@ -103,22 +118,36 @@ const hexNoHash = (hex: string) => hex.replace('#', '').toUpperCase()
 // Build the docx
 // ---------------------------------------------------------------------------
 export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
-  const { cover, selectedServiceIds, customServices, taskState, specValues, logoBuffer, customTasksByBuiltinService } = payload
+  const {
+    cover,
+    selectedServiceIds,
+    customServices,
+    taskState,
+    specValues,
+    logoBuffer,
+    customTasksByBuiltinService,
+    milestones,
+  } = payload
 
   // Resolve services: built-in selected + custom, with custom tasks merged into builtin
-  const builtinSelected = SERVICES.filter((s) => selectedServiceIds.includes(s.id)).map((s) => ({
-    ...s,
-    tasks: [...s.tasks, ...(customTasksByBuiltinService?.[s.id] ?? [])],
-  }))
-  const allServices = [...builtinSelected, ...customServices]
+  const builtinSelected: Service[] = SERVICES.filter((s) => selectedServiceIds.includes(s.id)).map(
+    (s) => ({
+      ...s,
+      tasks: [...s.tasks, ...(customTasksByBuiltinService?.[s.id] ?? [])],
+    })
+  ) as Service[]
+  const allServices: (Service | CustomService)[] = [...builtinSelected, ...customServices]
 
   const ORCHID = hexNoHash(BRAND.orchidPurple)
   const JET = hexNoHash(BRAND.jetBlack)
   const LAVENDER = hexNoHash(BRAND.softLavender)
   const WHITE = hexNoHash(BRAND.pureWhite)
+  const GREY = '666666'
 
-  // ---- Cover Page ---------------------------------------------------------
-  const coverImage = logoBuffer
+  // =========================================================================
+  // SECTION 1 — Cover Page
+  // =========================================================================
+  const coverImage: (Paragraph | Table) = logoBuffer
     ? new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 2400, after: 240 },
@@ -138,234 +167,228 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
       alignment: AlignmentType.CENTER,
       spacing: { before: 0, after: 0 },
       children: [
-        new TextRun({
-          text: 'MassaPro',
-          bold: true,
-          size: 56, // 28pt (size is half-points)
-          color: ORCHID,
-          font: 'Calibri',
-        }),
+        new TextRun({ text: 'MassaPro', bold: true, size: 56, color: ORCHID, font: 'Calibri' }),
       ],
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { before: 120, after: 480 },
+      spacing: { before: 120, after: 240 },
       children: [
-        new TextRun({
-          text: 'STATEMENT OF WORK',
-          bold: true,
-          size: 36, // 18pt
-          color: JET,
-          font: 'Calibri',
-        }),
+        new TextRun({ text: 'Statement of Work', bold: true, size: 36, color: JET, font: 'Calibri' }),
       ],
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 240 },
+      spacing: { before: 0, after: 480 },
       children: [
         new TextRun({
-          text: 'AI-powered contact center platform',
+          text: brandClean(`Implementation of your MassaPro platform`),
           italics: true,
-          size: 22, // 11pt
-          color: JET,
+          size: 24,
+          color: GREY,
           font: 'Calibri',
         }),
       ],
     }),
-    // Cover info table
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: noBorderAll(),
       alignment: AlignmentType.CENTER,
       rows: [
-        coverInfoRow('Client', cover.clientName || '—'),
-        coverInfoRow('Project', cover.projectName || '—'),
+        coverInfoRow('Client', cover.clientName || '<client name>'),
+        coverInfoRow('Project', cover.projectName || '<project>'),
         coverInfoRow('Date', cover.date || '—'),
         coverInfoRow('Version', cover.version || 'v1.0'),
-        coverInfoRow('Prepared By', cover.preparedBy || '—'),
+        coverInfoRow('Prepared By', cover.preparedBy || 'MassaPro Solutions Architect'),
+      ],
+    }),
+    new Paragraph({ children: [new PageBreak()] }),
+  ]
+
+  // =========================================================================
+  // SECTION 2 — Welcome Page (Connex template cover page 2)
+  // =========================================================================
+  const welcomeChildren: (Paragraph | Table)[] = [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 600, after: 120 },
+      children: [
+        new TextRun({ text: 'Welcome to MassaPro', bold: true, size: 40, color: ORCHID, font: 'Calibri' }),
       ],
     }),
     new Paragraph({
-      children: [new PageBreak()],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 360 },
+      children: [
+        new TextRun({ text: WELCOME_PARAGRAPHS.subtitle, bold: true, size: 26, color: JET, font: 'Calibri' }),
+      ],
     }),
+    bodyParagraph(WELCOME_PARAGRAPHS.intro),
+    bodyParagraph(WELCOME_PARAGRAPHS.body),
+    // Benefits list (Connex template)
+    ...WELCOME_PARAGRAPHS.benefits.map((b) => bulletParagraph(b, 0)),
+    bodyParagraph(WELCOME_PARAGRAPHS.closing, { before: 240 }),
+    bodyParagraph(WELCOME_PARAGRAPHS.retention, { italic: true }),
+    new Paragraph({ children: [new PageBreak()] }),
   ]
 
-  // ---- Section 1: Project Overview ---------------------------------------
+  // =========================================================================
+  // SECTION 3 — Project Overview + Deliverables
+  // =========================================================================
   const overviewChildren: (Paragraph | Table)[] = [
-    sectionHeading(brandClean('1. Project Overview')),
-    new Paragraph({
-      spacing: { after: 240, line: 320, lineRule: LineRuleType.AUTO },
-      children: [
-        new TextRun({
-          text: brandClean(
-            cover.overview ||
-              `This Statement of Work ("SOW") describes the services that MassaPro will deliver to ${cover.clientName || 'the Client'} for the ${cover.projectName || 'project'} initiative. The scope, tasks, technical specifications and deliverables outlined below reflect the services selected by the Client and confirmed by MassaPro at the time of signing.`
-          ),
-          size: 22,
-          color: JET,
-          font: 'Calibri',
-        }),
-      ],
-    }),
-  ]
-
-  // ---- Section 2: Scope of Services --------------------------------------
-  const scopeChildren: (Paragraph | Table)[] = [
-    sectionHeading(brandClean('2. Scope of Services')),
-    new Paragraph({
-      spacing: { after: 200 },
-      children: [
-        new TextRun({
-          text: 'The following services are in scope under this SOW. Each selected service carries its own technical specification and task breakdown, detailed in the sections that follow.',
-          size: 22,
-          color: JET,
-          font: 'Calibri',
-        }),
-      ],
-    }),
+    sectionHeading('Statement of Work'),
+    subSectionHeading('Project Overview'),
+    bodyParagraph(
+      brandClean(
+        cover.overview ||
+          `This Statement of Work ("SOW") describes the services that MassaPro will deliver to ${cover.clientName || '<client name>'} for the ${cover.projectName || 'Implementation of your MassaPro platform'} initiative. The scope, deliverables, configuration, requirements, milestones and acceptance criteria outlined below reflect the services selected by the Client and confirmed by MassaPro at the time of signing.`
+      )
+    ),
+    subSectionHeading('Deliverables'),
+    bodyParagraph(
+      brandClean(
+        `MassaPro will implement the following project deliverables with ${cover.clientName || '<client name>'}:`
+      ),
+      { after: 120 }
+    ),
+    subSectionHeading('Phase 1'),
   ]
   if (allServices.length === 0) {
-    scopeChildren.push(
+    overviewChildren.push(
       new Paragraph({
         children: [new TextRun({ text: 'No services selected.', italics: true, size: 22, color: JET, font: 'Calibri' })],
       })
     )
   } else {
-    allServices.forEach((svc, i) => {
-      scopeChildren.push(
-        new Paragraph({
-          spacing: { before: 80, after: 80 },
-          children: [
-            new TextRun({ text: `${i + 1}. `, bold: true, size: 22, color: ORCHID, font: 'Calibri' }),
-            new TextRun({ text: brandClean(svc.name), bold: true, size: 22, color: JET, font: 'Calibri' }),
-            new TextRun({ text: ` (${CATEGORY_LABELS[(svc as any).category as ServiceCategory] || 'Custom'})`, size: 22, color: '666666', font: 'Calibri' }),
-          ],
-        }),
-        new Paragraph({
-          spacing: { after: 120 },
-          indent: { left: 360 },
-          children: [
-            new TextRun({ text: brandClean(svc.description), size: 22, color: JET, font: 'Calibri' }),
-          ],
-        })
+    allServices.forEach((svc) => {
+      overviewChildren.push(
+        bulletParagraph(brandClean(`Setup and configuration of ${svc.name}`), 0)
       )
     })
+    // Always add the training & support line per the Connex template
+    overviewChildren.push(
+      bulletParagraph('Remote training with Technical Services Engineer', 0),
+      bulletParagraph('Further dedicated Technical Services Engineer support for full Go-Live', 0)
+    )
   }
 
-  // ---- Section 3: Technical Specifications -------------------------------
-  const specsChildren: (Paragraph | Table)[] = [
-    sectionHeading(brandClean('3. Technical Specifications')),
-    new Paragraph({
-      spacing: { after: 200 },
-      children: [
-        new TextRun({
-          text: 'The following technical specifications define the configuration parameters for each selected service. Values marked as examples should be confirmed with the Client during the discovery phase.',
-          size: 22,
-          color: JET,
-          font: 'Calibri',
-        }),
-      ],
-    }),
-  ]
-  allServices.forEach((svc) => {
-    specsChildren.push(
+  // =========================================================================
+  // SECTION 4 — Scope (per-service Configuration + Requirements)
+  // =========================================================================
+  const scopeChildren: (Paragraph | Table)[] = []
+  let serviceIndex = 0
+  for (const svc of allServices) {
+    serviceIndex += 1
+    // "Scope / Phase 1 / <Service Name>" header block
+    scopeChildren.push(
+      new Paragraph({ children: [new PageBreak()] }),
+      sectionHeading('Scope'),
+      subSectionHeading('Phase 1'),
       new Paragraph({
-        spacing: { before: 240, after: 100 },
-        children: [new TextRun({ text: brandClean(svc.name), bold: true, size: 26, color: ORCHID, font: 'Calibri' })],
-      })
+        spacing: { before: 80, after: 240 },
+        children: [
+          new TextRun({
+            text: brandClean(svc.name),
+            bold: true,
+            size: 32,
+            color: ORCHID,
+            font: 'Calibri',
+          }),
+        ],
+      }),
+      // Intro paragraph (Connex-template style: "Your MassaPro TSE will deploy X to <client>.")
+      bodyParagraph(brandClean((svc as Service).intro || svc.description))
     )
-    if (svc.techSpecs.length === 0) {
-      specsChildren.push(
+
+    // Configuration sub-heading + bullets
+    scopeChildren.push(subSectionHeading('Configuration'))
+    if (svc.tasks.length === 0) {
+      scopeChildren.push(
         new Paragraph({
-          children: [new TextRun({ text: 'No technical specifications defined.', italics: true, size: 22, color: JET, font: 'Calibri' })],
+          children: [new TextRun({ text: 'No configuration items defined.', italics: true, size: 22, color: JET, font: 'Calibri' })],
         })
       )
-      return
-    }
-    specsChildren.push(
-      new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        borders: tableBorders(),
-        rows: [
-          new TableRow({
-            tableHeader: true,
-            children: [
-              specHeaderCell('Field'),
-              specHeaderCell('Description'),
-              specHeaderCell('Value / Example'),
-            ],
-          }),
-          ...svc.techSpecs.map(
-            (row) =>
-              new TableRow({
-                children: [
-                  specBodyCell(row.field, true),
-                  specBodyCell(row.description, false),
-                  specBodyCell(specValues[row.id] ?? row.example ?? '—', false),
-                ],
-              })
-          ),
-        ],
+    } else {
+      svc.tasks.forEach((task) => {
+        scopeChildren.push(bulletParagraph(brandClean(task.title), 0))
+        if (task.description) {
+          scopeChildren.push(bodyParagraph(brandClean(task.description), { indent: 360, after: 80, size: 20 }))
+        }
+        if (task.subTasks && task.subTasks.length) {
+          task.subTasks.forEach((sub) => {
+            scopeChildren.push(bulletParagraph(brandClean(sub.title), 1))
+            if (sub.description) {
+              scopeChildren.push(bodyParagraph(brandClean(sub.description), { indent: 720, after: 60, size: 20, color: GREY }))
+            }
+          })
+        }
       })
-    )
-  })
+    }
 
-  // ---- Section 4: Project Tasks ------------------------------------------
-  // Aggregate all tasks from all selected services + their sub-tasks.
-  const tasksChildren: (Paragraph | Table)[] = [
-    sectionHeading(brandClean('4. Project Tasks')),
-    new Paragraph({
-      spacing: { after: 200 },
-      children: [
-        new TextRun({
-          text: 'The following tasks define the work required to deliver the services in scope. Status, owner, due date and notes are tracked in real-time by the MassaPro SOW Builder and exported here for record-keeping.',
-          size: 22,
-          color: JET,
-          font: 'Calibri',
-        }),
-      ],
-    }),
+    // Requirements sub-heading + bullets (these are the spec rows)
+    scopeChildren.push(subSectionHeading('Requirements'))
+    if (svc.techSpecs.length === 0) {
+      scopeChildren.push(
+        new Paragraph({
+          children: [new TextRun({ text: 'No requirements defined.', italics: true, size: 22, color: JET, font: 'Calibri' })],
+        })
+      )
+    } else {
+      svc.techSpecs.forEach((row) => {
+        const value = specValues[row.id]
+        const text = value
+          ? `${row.field}: ${brandClean(row.description)} (Provided: ${brandClean(value)})`
+          : `${row.field}: ${brandClean(row.description)}`
+        scopeChildren.push(bulletParagraph(text, 0))
+      })
+    }
+  }
+
+  // =========================================================================
+  // SECTION 5 — Configuration Tracker (status / owner / due / notes)
+  // =========================================================================
+  const trackerChildren: (Paragraph | Table)[] = [
+    new Paragraph({ children: [new PageBreak()] }),
+    sectionHeading('Statement of Work'),
+    subSectionHeading('Configuration Tracker'),
+    bodyParagraph(
+      'The following tracker shows the live status of every configuration item across all selected services. Use this table to track progress against owners, due dates and notes during the project delivery.',
+      { after: 200 }
+    ),
   ]
-
   const taskRows: TableRow[] = [
     new TableRow({
       tableHeader: true,
       children: [
         taskHeaderCell('#'),
-        taskHeaderCell('Task'),
+        taskHeaderCell('Configuration Item'),
         taskHeaderCell('Service'),
         taskHeaderCell('Status'),
         taskHeaderCell('Owner'),
         taskHeaderCell('Due'),
-        taskHeaderCell('Est. Hrs'),
         taskHeaderCell('Notes'),
       ],
     }),
   ]
   let taskCounter = 0
-  let totalHours = 0
   allServices.forEach((svc) => {
     svc.tasks.forEach((task) => {
       taskCounter += 1
-      totalHours += task.estimatedHours || 0
       const state = taskState[task.id] || {}
       const status = state.status ? STATUS_LABELS[state.status] : STATUS_LABELS.pending
       taskRows.push(
         new TableRow({
           children: [
             taskBodyCell(String(taskCounter), true),
-            taskBodyCell(brandClean(task.title) + (task.description ? `\n${brandClean(task.description)}` : ''), false),
+            taskBodyCell(brandClean(task.title), false),
             taskBodyCell(brandClean(svc.name), false),
             taskBodyCell(status, false),
             taskBodyCell(state.owner || '', false),
             taskBodyCell(state.dueDate || '', false),
-            taskBodyCell(String(task.estimatedHours || 0), false),
             taskBodyCell(state.notes || '', false),
           ],
         })
       )
-      // sub-tasks
       if (task.subTasks && task.subTasks.length) {
         task.subTasks.forEach((sub) => {
           taskCounter += 1
@@ -375,12 +398,11 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
             new TableRow({
               children: [
                 taskBodyCell(`${taskCounter}`, true),
-                taskBodyCell(`  ↳ ${brandClean(sub.title)} — ${brandClean(sub.description)}`, false),
+                taskBodyCell(`↳ ${brandClean(sub.title)}`, false),
                 taskBodyCell(brandClean(svc.name), false),
                 taskBodyCell(subStatus, false),
                 taskBodyCell(subState.owner || '', false),
                 taskBodyCell(subState.dueDate || '', false),
-                taskBodyCell('—', false),
                 taskBodyCell(subState.notes || '', false),
               ],
             })
@@ -389,35 +411,75 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
       }
     })
   })
-  tasksChildren.push(
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: tableBorders(),
-      rows: taskRows,
-    })
-  )
-  tasksChildren.push(
-    new Paragraph({
-      spacing: { before: 160, after: 0 },
-      children: [
-        new TextRun({ text: 'Total Estimated Hours: ', bold: true, size: 22, color: JET, font: 'Calibri' }),
-        new TextRun({ text: String(totalHours), bold: true, size: 22, color: ORCHID, font: 'Calibri' }),
-      ],
-    })
-  )
+  if (taskRows.length > 1) {
+    trackerChildren.push(
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: tableBorders(),
+        rows: taskRows,
+      })
+    )
+  } else {
+    trackerChildren.push(
+      new Paragraph({
+        children: [new TextRun({ text: 'No configuration items selected.', italics: true, size: 22, color: JET, font: 'Calibri' })],
+      })
+    )
+  }
 
-  // ---- Section 5: Milestones & Deliverables ------------------------------
+  // =========================================================================
+  // SECTION 6 — Infrastructure & Access Requirements
+  // =========================================================================
+  const infraChildren: (Paragraph | Table)[] = [
+    new Paragraph({ children: [new PageBreak()] }),
+    sectionHeading('Statement of Work'),
+    subSectionHeading('Requirements'),
+    bodyParagraph(
+      'The following infrastructure, hardware and connectivity requirements must be met by the Client prior to and during the project.',
+      { after: 200 }
+    ),
+    subSectionHeading('Infrastructure & Access Requirements'),
+    ...INFRA_REQUIREMENTS.preDeployment.map((b) => bulletParagraph(brandClean(b), 0)),
+    subSectionHeading('Hardware'),
+    ...INFRA_REQUIREMENTS.hardware.map((b) => bulletParagraph(brandClean(b), 0)),
+    subSectionHeading('Internet'),
+    ...INFRA_REQUIREMENTS.internet.map((b) => bulletParagraph(brandClean(b), 0)),
+  ]
+
+  // =========================================================================
+  // SECTION 7 — Support
+  // =========================================================================
+  const supportChildren: (Paragraph | Table)[] = [
+    new Paragraph({ children: [new PageBreak()] }),
+    sectionHeading('Statement of Work'),
+    subSectionHeading('Support'),
+    subSectionHeading(SUPPORT_SECTIONS.intro),
+    ...SUPPORT_SECTIONS.supportService.map((b) => bodyParagraph(brandClean(b))),
+    subSectionHeading('Support Portal'),
+    ...SUPPORT_SECTIONS.supportPortal.map((b) => bodyParagraph(brandClean(b))),
+    subSectionHeading('Support Ticket Submissions'),
+    ...SUPPORT_SECTIONS.ticketSubmission.map((b) => bodyParagraph(brandClean(b))),
+    // Ticket template — rendered as a simple indented text block to mirror
+    // the Connex PDF's monospace-style template box.
+    new Paragraph({ spacing: { before: 160, after: 60 } }),
+    ...SUPPORT_SECTIONS.ticketTemplate.map((line) =>
+      bodyParagraph(line, { indent: 360, size: 20, after: 40, color: JET })
+    ),
+  ]
+
+  // =========================================================================
+  // SECTION 8 — Project Milestones
+  // =========================================================================
+  const milestoneRows: MilestoneRow[] = milestones && milestones.length > 0 ? milestones : DEFAULT_MILESTONES
   const milestoneChildren: (Paragraph | Table)[] = [
-    sectionHeading(brandClean('5. Milestones & Deliverables')),
+    new Paragraph({ children: [new PageBreak()] }),
+    sectionHeading('Project Milestones'),
+    subSectionHeading('Phase 1'),
     new Paragraph({
-      spacing: { after: 200 },
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 80, after: 160 },
       children: [
-        new TextRun({
-          text: 'Project milestones will be tracked weekly. Final acceptance is contingent on the Client signing off on the deliverables defined below.',
-          size: 22,
-          color: JET,
-          font: 'Calibri',
-        }),
+        new TextRun({ text: 'Project Milestones', bold: true, size: 28, color: ORCHID, font: 'Calibri' }),
       ],
     }),
     new Table({
@@ -426,98 +488,75 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
       rows: [
         new TableRow({
           tableHeader: true,
-          children: [specHeaderCell('Milestone'), specHeaderCell('Deliverable'), specHeaderCell('Target')],
+          children: [
+            taskHeaderCell('Task'),
+            taskHeaderCell('Target Date'),
+            taskHeaderCell('Status'),
+          ],
         }),
-        new TableRow({ children: [specBodyCell('M1', true), specBodyCell('Discovery & sign-off on scope', false), specBodyCell('Week 1', false)] }),
-        new TableRow({ children: [specBodyCell('M2', true), specBodyCell('Environment provisioning & integrations', false), specBodyCell('Week 2–3', false)] }),
-        new TableRow({ children: [specBodyCell('M3', true), specBodyCell('Channel & voice configuration complete', false), specBodyCell('Week 3–4', false)] }),
-        new TableRow({ children: [specBodyCell('M4', true), specBodyCell('UAT & training', false), specBodyCell('Week 5', false)] }),
-        new TableRow({ children: [specBodyCell('M5', true), specBodyCell('Go-live & hypercare', false), specBodyCell('Week 6', false)] }),
+        ...milestoneRows.map((m) =>
+          new TableRow({
+            children: [
+              taskBodyCell(brandClean(m.task), false),
+              taskBodyCell(m.targetDate, false),
+              taskBodyCell(m.status, false),
+            ],
+          })
+        ),
       ],
     }),
+    bodyParagraph('Project progress will be tracked in the shared Project Tracker document.', { before: 200 }),
   ]
 
-  // ---- Section 6: Terms & Conditions -------------------------------------
-  const termsChildren: (Paragraph | Table)[] = [
-    sectionHeading(brandClean('6. Terms & Conditions')),
-    new Paragraph({
-      spacing: { after: 160, line: 320, lineRule: LineRuleType.AUTO },
-      children: [
-        new TextRun({
-          text: '6.1 Engagement. This SOW is governed by the Master Services Agreement signed between MassaPro and the Client. In case of conflict, the MSA prevails.',
-          size: 22,
-          color: JET,
-          font: 'Calibri',
-        }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { after: 160, line: 320, lineRule: LineRuleType.AUTO },
-      children: [
-        new TextRun({
-          text: '6.2 Change orders. Any change to the scope, tasks or specs in this SOW requires a written change order signed by both parties. MassaPro will provide an effort estimate for each change request within five business days.',
-          size: 22,
-          color: JET,
-          font: 'Calibri',
-        }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { after: 160, line: 320, lineRule: LineRuleType.AUTO },
-      children: [
-        new TextRun({
-          text: '6.3 Acceptance. Deliverables are deemed accepted if the Client does not raise written objections within ten business days of delivery.',
-          size: 22,
-          color: JET,
-          font: 'Calibri',
-        }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { after: 160, line: 320, lineRule: LineRuleType.AUTO },
-      children: [
-        new TextRun({
-          text: '6.4 Confidentiality. Both parties agree to keep confidential all information exchanged during the engagement, including the contents of this SOW.',
-          size: 22,
-          color: JET,
-          font: 'Calibri',
-        }),
-      ],
-    }),
-  ]
-
-  // ---- Section 7: Signatures ---------------------------------------------
+  // =========================================================================
+  // SECTION 9 — Signatures (extension to the Connex template)
+  // =========================================================================
   const signatureChildren: (Paragraph | Table)[] = [
-    sectionHeading(brandClean('7. Signatures')),
-    new Paragraph({
-      spacing: { after: 320 },
-      children: [
-        new TextRun({
-          text: 'By signing below, the authorized representatives of each party accept the scope, tasks and specifications defined in this SOW.',
-          size: 22,
-          color: JET,
-          font: 'Calibri',
-        }),
-      ],
-    }),
+    new Paragraph({ children: [new PageBreak()] }),
+    sectionHeading('Signatures'),
+    bodyParagraph(
+      'By signing below, the authorized representatives of each party accept the scope, deliverables, configuration items, requirements and milestones defined in this Statement of Work.',
+      { after: 320 }
+    ),
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: tableBorders(),
       rows: [
         new TableRow({
           tableHeader: true,
-          children: [specHeaderCell('Role'), specHeaderCell('Name'), specHeaderCell('Signature'), specHeaderCell('Date')],
+          children: [
+            specHeaderCell('Role'),
+            specHeaderCell('Name'),
+            specHeaderCell('Signature'),
+            specHeaderCell('Date'),
+          ],
         }),
-        new TableRow({ children: [specBodyCell('MassaPro Authorized Signatory', true), specBodyCell('', false), specBodyCell('', false), specBodyCell('', false)] }),
-        new TableRow({ children: [specBodyCell('Client Authorized Signatory', true), specBodyCell('', false), specBodyCell('', false), specBodyCell('', false)] }),
+        new TableRow({
+          children: [
+            specBodyCell('MassaPro Authorized Signatory', true),
+            specBodyCell('', false),
+            specBodyCell('', false),
+            specBodyCell('', false),
+          ],
+        }),
+        new TableRow({
+          children: [
+            specBodyCell(`${cover.clientName || 'Client'} Authorized Signatory`, true),
+            specBodyCell('', false),
+            specBodyCell('', false),
+            specBodyCell('', false),
+          ],
+        }),
       ],
     }),
   ]
 
-  // ---- Document assembly --------------------------------------------------
+  // =========================================================================
+  // Document assembly
+  // =========================================================================
   const doc = new Document({
     creator: 'MassaPro SOW Builder',
-    title: `SOW — ${cover.projectName || 'Project'}`,
+    title: `SOW — ${cover.projectName || 'Implementation of your MassaPro platform'}`,
     description: 'Generated by MassaPro SOW Builder',
     styles: {
       default: {
@@ -541,7 +580,12 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
                 alignment: AlignmentType.RIGHT,
                 children: [
                   new TextRun({ text: 'MassaPro  •  ', bold: true, size: 18, color: ORCHID, font: 'Calibri' }),
-                  new TextRun({ text: 'SOW — ' + (cover.projectName || 'Project'), size: 18, color: '888888', font: 'Calibri' }),
+                  new TextRun({
+                    text: 'SOW — ' + (cover.projectName || 'Implementation of your MassaPro platform'),
+                    size: 18,
+                    color: GREY,
+                    font: 'Calibri',
+                  }),
                 ],
               }),
             ],
@@ -553,11 +597,11 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
               new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: [
-                  new TextRun({ text: 'Page ', size: 18, color: '888888', font: 'Calibri' }),
-                  new TextRun({ children: [PageNumber.CURRENT], size: 18, color: '888888', font: 'Calibri' }),
-                  new TextRun({ text: ' of ', size: 18, color: '888888', font: 'Calibri' }),
-                  new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 18, color: '888888', font: 'Calibri' }),
-                  new TextRun({ text: '  •  MassaPro SOW Builder', size: 18, color: '888888', font: 'Calibri' }),
+                  new TextRun({ text: 'Page ', size: 18, color: GREY, font: 'Calibri' }),
+                  new TextRun({ children: [PageNumber.CURRENT], size: 18, color: GREY, font: 'Calibri' }),
+                  new TextRun({ text: ' of ', size: 18, color: GREY, font: 'Calibri' }),
+                  new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 18, color: GREY, font: 'Calibri' }),
+                  new TextRun({ text: '  •  MassaPro SOW Builder', size: 18, color: GREY, font: 'Calibri' }),
                 ],
               }),
             ],
@@ -565,12 +609,13 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
         },
         children: [
           ...coverChildren,
+          ...welcomeChildren,
           ...overviewChildren,
           ...scopeChildren,
-          ...specsChildren,
-          ...tasksChildren,
+          ...trackerChildren,
+          ...infraChildren,
+          ...supportChildren,
           ...milestoneChildren,
-          ...termsChildren,
           ...signatureChildren,
         ],
       },
@@ -583,6 +628,9 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
 // ---------------------------------------------------------------------------
 // Helpers — paragraphs, cells, borders
 // ---------------------------------------------------------------------------
+
+// Top-level section heading (e.g., "Statement of Work", "Scope") — purple,
+// underlined, large.
 function sectionHeading(text: string): Paragraph {
   return new Paragraph({
     spacing: { before: 320, after: 160 },
@@ -601,6 +649,73 @@ function sectionHeading(text: string): Paragraph {
   })
 }
 
+// Sub-section heading (e.g., "Project Overview", "Configuration") — bold,
+// jet black, no border.
+function subSectionHeading(text: string): Paragraph {
+  return new Paragraph({
+    spacing: { before: 240, after: 100 },
+    children: [
+      new TextRun({
+        text,
+        bold: true,
+        size: 26, // 13pt
+        color: '030712',
+        font: 'Calibri',
+      }),
+    ],
+  })
+}
+
+// Body paragraph with sensible defaults (sans-serif, 11pt, jet black, line spacing 1.5)
+function bodyParagraph(
+  text: string,
+  opts: {
+    before?: number
+    after?: number
+    size?: number
+    color?: string
+    bold?: boolean
+    italic?: boolean
+    indent?: number
+  } = {}
+): Paragraph {
+  return new Paragraph({
+    spacing: {
+      before: opts.before ?? 0,
+      after: opts.after ?? 160,
+      line: 320,
+      lineRule: LineRuleType.AUTO,
+    },
+    indent: opts.indent ? { left: opts.indent } : undefined,
+    children: [
+      new TextRun({
+        text,
+        size: opts.size ?? 22,
+        color: opts.color ?? '030712',
+        bold: opts.bold,
+        italics: opts.italic,
+        font: 'Calibri',
+      }),
+    ],
+  })
+}
+
+// Bullet paragraph — uses the unicode bullet "●" with hanging indent.
+// level=0 → top-level bullet, level=1 → sub-bullet (indented).
+function bulletParagraph(text: string, level: number = 0): Paragraph {
+  const indent = 360 + level * 360
+  const bulletChar = level === 0 ? '●' : '○'
+  return new Paragraph({
+    spacing: { before: 40, after: 40, line: 300, lineRule: LineRuleType.AUTO },
+    indent: { left: indent, hanging: 200 },
+    children: [
+      new TextRun({ text: `${bulletChar}  `, size: 22, color: '9333EA', font: 'Calibri', bold: true }),
+      new TextRun({ text, size: 22, color: '030712', font: 'Calibri' }),
+    ],
+  })
+}
+
+// Cover-info table row (label / value)
 function coverInfoRow(label: string, value: string): TableRow {
   return new TableRow({
     children: [

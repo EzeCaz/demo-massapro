@@ -2,24 +2,27 @@
 //
 // This module is the single source of truth for the SOW Builder UI:
 //   - SERVICES defines all built-in channels/features that can be toggled
-//   - Each service has a default set of tasks and tech-spec rows
-//   - The Word export reads the same data structure
+//   - Each service has: intro paragraph, configuration bullets (tasks),
+//     and requirements bullets (tech specs)
+//   - The Word export reads the same data structure and lays it out in the
+//     Connex-template format ("Your MassaPro Technical Services Engineer
+//     will deploy X to <client>. Configuration: ... Requirements: ...")
+//
+// Content is taken from the original Connex/ConnexAI SOW template (uploaded
+// as "Massapro- Statement of Work.pdf") and rebranded to MassaPro/MassaProAI
+// per the brand book.
 //
 // Brand colors (from MassaPro Brand Book):
 //   Orchid Purple  #9333EA   (primary accent, headers, buttons)
 //   Pure White     #FFFFFF   (backgrounds, card fills)
 //   Jet Black      #030712   (body text, primary text)
 //   Soft Lavender  #F3E8FF   (subtle backgrounds, badges, hover states)
-//
-// All tasks are written as deliverables (Connex→MassaPro replacement applies
-// at render time so the SOW is brand-clean by default).
 
 export type ServiceCategory =
   | 'channel'        // inbound/outbound communication channels
-  | 'voice'          // voice-specific features (IVR, dialer, queue)
-  | 'infrastructure' // SIP, CRM, DB, reports
-  | 'data'           // import/storage/archival
-  | 'ops'            // ops, security, training
+  | 'productivity'    // AI / quality / dashboard features
+  | 'infrastructure'  // SIP, integrations
+  | 'ops'             // training & support
 
 export interface ServiceTask {
   id: string
@@ -33,8 +36,8 @@ export interface ServiceTask {
 
 export interface TechSpecRow {
   id: string
-  field: string
-  description: string
+  field: string         // short tag
+  description: string   // full requirement text
   example?: string
 }
 
@@ -42,255 +45,92 @@ export interface Service {
   id: string
   name: string
   category: ServiceCategory
-  icon: string // lucide icon name (we map it in the component)
-  description: string
+  icon: string // lucide icon name (mapped in component)
+  description: string    // tagline for selection card
+  intro: string         // "Your MassaPro Technical Services Engineer will deploy X to <client>."
   enabledByDefault?: boolean
-  tasks: ServiceTask[]
-  techSpecs: TechSpecRow[]
+  tasks: ServiceTask[]      // Configuration bullets
+  techSpecs: TechSpecRow[]  // Requirements bullets
 }
 
 // ---------------------------------------------------------------------------
-// Service catalog
+// Service catalog — derived from the original Connex SOW template
+// (upload/Massapro- Statement of Work.pdf) and rebranded Connex→MassaPro.
 // ---------------------------------------------------------------------------
 export const SERVICES: Service[] = [
-  // ---- CHANNELS ------------------------------------------------------------
+  // ====== CHANNELS ========================================================
   {
     id: 'voice',
-    name: 'Voice (Inbound/Outbound)',
+    name: 'Voice',
     category: 'channel',
     icon: 'Phone',
-    description: 'Inbound and outbound voice calls with queue, routing and recording.',
+    description: 'Inbound and outbound voice with CLIs, WebRTC, SIP trunk and porting.',
     enabledByDefault: true,
+    intro: 'Your MassaPro Technical Services Engineer will deploy Voice to <client name>.',
     tasks: [
       {
         id: 'voice-1',
-        title: 'Provision voice infrastructure',
+        title: 'Provision CLIs for inbound and outbound dialling',
         description:
-          'Activate MassaPro voice tenants, allocate DID numbers, and verify call setup/teardown across primary and failover regions.',
-        estimatedHours: 12,
+          'MassaPro will provide <client name> with <number> CLIs for inbound and outbound dialling. Upon request, additional CLIs can be provisioned by our carrier team if required.',
+        estimatedHours: 6,
         category: 'channel',
+        subTasks: [
+          { id: 'voice-1a', title: '<Number of CLIs> x <area code> area code', description: 'Specific allocation per area code.' },
+        ],
       },
       {
         id: 'voice-2',
-        title: 'Configure inbound call routing',
+        title: 'Train on creation of inbound and outbound campaigns',
         description:
-          'Build skill-based routing rules, queue overflow logic, and business-hours / after-hours call flows.',
-        estimatedHours: 16,
+          'Your Technical Services Engineer will provide training to enable the creation of inbound and outbound campaigns.',
+        estimatedHours: 4,
         category: 'channel',
         subTasks: [
-          { id: 'voice-2a', title: 'Skills & queues', description: 'Define skills, queues and priority weights.' },
-          { id: 'voice-2b', title: 'Hours of operation', description: 'Configure business hours per region/language.' },
-          { id: 'voice-2c', title: 'Overflow handling', description: 'Set overflow to voicemail, callback, or backup queue.' },
+          { id: 'voice-2a', title: '<List campaign information>', description: 'Campaign names, dispositions, calling windows.' },
         ],
       },
       {
         id: 'voice-3',
-        title: 'Enable call recording & monitoring',
-        description:
-          'Activate recording with pause/resume, role-based playback access, and retention policy per compliance.',
-        estimatedHours: 8,
+        title: 'Configure WebRTC for agent audio via web browser',
+        description: 'WebRTC will be configured to enable agent audio through a web browser.',
+        estimatedHours: 4,
         category: 'channel',
       },
       {
         id: 'voice-4',
-        title: 'Voice users & permissions',
+        title: 'Configure SIP trunk for inbound traffic',
         description:
-          'Onboard agents and supervisors, assign roles, configure softphone credentials and device profiles.',
-        estimatedHours: 6,
+          'A SIP trunk will be configured for the purpose of servicing inbound traffic via pointing of CLIs to MassaPro\'s IP address.',
+        estimatedHours: 8,
         category: 'channel',
       },
-    ],
-    techSpecs: [
-      { id: 'voice-spec-1', field: 'Languages to use', description: 'Languages for IVR and agent voice.', example: 'EN, ES, HE' },
-      { id: 'voice-spec-2', field: 'Tel numbers', description: 'Numbers to port or whitelist.', example: '+1 555, +972 3, +44 20' },
-      { id: 'voice-spec-3', field: 'Voice users count', description: 'Concurrent agent seats.', example: '25' },
-      { id: 'voice-spec-4', field: 'Inbound calls/day', description: 'Current inbound volume.', example: '~1,500' },
-    ],
-  },
-  {
-    id: 'autodialer',
-    name: 'Auto Dialer (Outbound Campaigns)',
-    category: 'voice',
-    icon: 'Zap',
-    description: 'Predictive / progressive / preview dialer for outbound campaigns.',
-    enabledByDefault: false,
-    tasks: [
       {
-        id: 'ad-1',
-        title: 'Configure dialer campaign',
+        id: 'voice-5',
+        title: 'Port <amount of numbers> CLI numbers to MassaPro',
         description:
-          'Build campaign with list source, calling window, pacing algorithm (predictive / progressive / preview), and dispositions.',
-        estimatedHours: 10,
-        category: 'voice',
-      },
-      {
-        id: 'ad-2',
-        title: 'Import lead lists',
-        description:
-          'Map lead CSV columns to MassaPro fields, dedupe by phone, set DNC scrub and timezone rules.',
-        estimatedHours: 6,
-        category: 'voice',
-      },
-      {
-        id: 'ad-3',
-        title: 'Skills & agent assignment',
-        description: 'Assign agents to campaign skills, set concurrency and per-agent pacing limits.',
-        estimatedHours: 4,
-        category: 'voice',
-      },
-      {
-        id: 'ad-4',
-        title: 'Compliance & DNC',
-        description: 'Apply DNC list, country-of-call rules, max attempts, quiet hours and abandoned-call thresholds.',
-        estimatedHours: 8,
-        category: 'voice',
-      },
-    ],
-    techSpecs: [
-      { id: 'ad-spec-1', field: 'Leads per day', description: 'Expected daily lead volume.', example: '5,000' },
-      { id: 'ad-spec-2', field: 'Dialer type', description: 'Predictive / Progressive / Preview.', example: 'Predictive' },
-      { id: 'ad-spec-3', field: 'Calling hours', description: 'Time window for outbound calls.', example: 'Mon–Fri 09:00–18:00 local' },
-    ],
-  },
-  {
-    id: 'ivr',
-    name: 'IVR / Flow Builder',
-    category: 'voice',
-    icon: 'Workflow',
-    description: 'Voice menus, DTMF/speech, smart routing, callbacks.',
-    enabledByDefault: true,
-    tasks: [
-      {
-        id: 'ivr-1',
-        title: 'Design IVR flow',
-        description: 'Map menus, options, language selection and self-service loops.',
-        estimatedHours: 10,
-        category: 'voice',
-      },
-      {
-        id: 'ivr-2',
-        title: 'Build speech / DTMF menus',
-        description: 'Configure prompts, ASR grammar and DTMF mappings.',
+          '<client name> will port <amount of numbers> CLI numbers to MassaPro. The MassaPro Numbers team will contact <client name> to obtain additional information in order to initiate the porting process.',
         estimatedHours: 12,
-        category: 'voice',
-      },
-      {
-        id: 'ivr-3',
-        title: 'Queue routing from IVR',
-        description: 'Connect IVR endpoints to queues, voicemail and callback flows.',
-        estimatedHours: 6,
-        category: 'voice',
-      },
-    ],
-    techSpecs: [
-      { id: 'ivr-spec-1', field: 'Languages', description: 'IVR prompt languages.', example: 'EN, ES, HE' },
-      { id: 'ivr-spec-2', field: 'ASR provider', description: 'Native or 3rd-party ASR.', example: 'MassaPro native' },
-    ],
-  },
-  {
-    id: 'ooh',
-    name: 'Out-of-Hours Routing',
-    category: 'voice',
-    icon: 'Moon',
-    description: 'After-hours, weekend and holiday routing strategy.',
-    enabledByDefault: false,
-    tasks: [
-      {
-        id: 'ooh-1',
-        title: 'Define business hours per queue',
-        description: 'Configure hours per region, language and queue.',
-        estimatedHours: 4,
-        category: 'voice',
-      },
-      {
-        id: 'ooh-2',
-        title: 'Configure after-hours flow',
-        description: 'Send to voicemail, callback form, emergency on-call, or alternate queue.',
-        estimatedHours: 6,
-        category: 'voice',
-      },
-      {
-        id: 'ooh-3',
-        title: 'Holiday calendar',
-        description: 'Import country / client holiday calendar and override rules.',
-        estimatedHours: 4,
-        category: 'voice',
-      },
-    ],
-    techSpecs: [
-      { id: 'ooh-spec-1', field: 'OOH strategy', description: 'Voicemail / callback / on-call.', example: 'Voicemail + callback' },
-    ],
-  },
-  {
-    id: 'inbound-queue',
-    name: 'Inbound Voice Queue',
-    category: 'voice',
-    icon: 'ListOrdered',
-    description: 'Skill-based inbound queue with waiting & priority logic.',
-    enabledByDefault: true,
-    tasks: [
-      {
-        id: 'iq-1',
-        title: 'Define queues & skills',
-        description: 'Create queues, assign skills, set service-level targets.',
-        estimatedHours: 8,
-        category: 'voice',
-      },
-      {
-        id: 'iq-2',
-        title: 'Waiting & priority',
-        description: 'Set max wait, priority weights, queue position announcements and overflow.',
-        estimatedHours: 6,
-        category: 'voice',
-      },
-      {
-        id: 'iq-3',
-        title: 'Callback & estimated wait',
-        description: 'Offer callback when wait exceeds threshold, announce EWT.',
-        estimatedHours: 6,
-        category: 'voice',
-      },
-    ],
-    techSpecs: [
-      { id: 'iq-spec-1', field: 'Service level target', description: 'Target answer rate.', example: '80% in 20s' },
-      { id: 'iq-spec-2', field: 'Max wait (s)', description: 'Max acceptable wait before callback.', example: '60' },
-    ],
-  },
-  // ---- DIGITAL CHANNELS -----------------------------------------------------
-  {
-    id: 'whatsapp',
-    name: 'WhatsApp',
-    category: 'channel',
-    icon: 'MessageCircle',
-    description: 'WhatsApp Business API integration with templates and agent inbox.',
-    enabledByDefault: false,
-    tasks: [
-      {
-        id: 'wa-1',
-        title: 'Connect WhatsApp Business Account',
-        description: 'WABA onboarding, phone number registration, message template approval.',
-        estimatedHours: 8,
         category: 'channel',
       },
       {
-        id: 'wa-2',
-        title: 'Build WhatsApp flow',
-        description: 'Map inbound message routing, agent assignment, bot handoff and template triggers.',
-        estimatedHours: 10,
-        category: 'channel',
-      },
-      {
-        id: 'wa-3',
-        title: 'Approve message templates',
-        description: 'Submit and approve HSM templates for notifications and outbound.',
+        id: 'voice-6',
+        title: 'Set up traffic routing during porting process',
+        description:
+          'Whilst the porting process is underway, <client name> is to route traffic to MassaPro by one of the following methods (delete if not applicable):',
         estimatedHours: 4,
         category: 'channel',
+        subTasks: [
+          { id: 'voice-6a', title: 'Divert existing CLIs to a CLI provided by MassaPro', description: 'Simplest option — divert from current carrier.' },
+          { id: 'voice-6b', title: 'Configure SIP trunk to point CLIs to MassaPro\'s IP address', description: 'If SIP trunk configured, MassaPro needs IP addresses from current voice platform to whitelist.' },
+        ],
       },
     ],
     techSpecs: [
-      { id: 'wa-spec-1', field: 'WABA ID', description: 'WhatsApp Business Account ID.', example: '1234567890' },
-      { id: 'wa-spec-2', field: 'Phone number', description: 'WhatsApp-registered number.', example: '+1 555 0100' },
-      { id: 'wa-spec-3', field: 'Templates', description: 'List of approved templates.', example: 'order_status, appointment_reminder' },
+      { id: 'voice-r-1', field: 'Audio files', description: 'Audio files for hold music, welcome messages, IVR prompts and out of hours messages.' },
+      { id: 'voice-r-2', field: 'CLI area code', description: 'Confirmation of the preferred CLI number area code(s).' },
+      { id: 'voice-r-3', field: 'Numbers to port', description: 'A list of the numbers that are to be ported to MassaPro.' },
+      { id: 'voice-r-4', field: 'Interaction credit', description: 'Sufficient interaction credit needs to be added to the account.' },
     ],
   },
   {
@@ -298,35 +138,29 @@ export const SERVICES: Service[] = [
     name: 'SMS',
     category: 'channel',
     icon: 'Smartphone',
-    description: 'Two-way SMS, campaign bulk send and keyword auto-responders.',
+    description: 'Dedicated SMS long numbers, two-way conversational or outbound.',
     enabledByDefault: false,
+    intro: 'Your MassaPro Technical Services Engineer will deploy SMS to <client name>.',
     tasks: [
       {
         id: 'sms-1',
-        title: 'Provision SMS numbers',
-        description: 'Allocate long-code / short-code / toll-free SMS numbers per country.',
-        estimatedHours: 6,
+        title: 'Provision <number> dedicated SMS long number(s)',
+        description: "MassaPro's carrier team will provision <number> dedicated SMS long number(s) for <client name>.",
+        estimatedHours: 4,
         category: 'channel',
       },
       {
         id: 'sms-2',
-        title: 'Configure SMS routing',
-        description: 'Inbound keyword routing, agent inbox, outbound campaign send.',
-        estimatedHours: 8,
-        category: 'channel',
-      },
-      {
-        id: 'sms-3',
-        title: 'Compliance (10DLC / A2P)',
-        description: 'Register campaigns, brand, and ensure carrier approval in US/CA.',
-        estimatedHours: 6,
+        title: 'Set up out-of-hours and in-hours SMS messages',
+        description: 'Your Technical Services Engineer will discuss the different SMS strategies and set up out of hours and in hours SMS messages during training.',
+        estimatedHours: 4,
         category: 'channel',
       },
     ],
     techSpecs: [
-      { id: 'sms-spec-1', field: 'Numbers', description: 'SMS-capable numbers.', example: '+1 555 0200' },
-      { id: 'sms-spec-2', field: 'Daily volume', description: 'Outbound SMS per day.', example: '10,000' },
-      { id: 'sms-spec-3', field: 'Countries', description: 'Destination countries.', example: 'US, CA, MX' },
+      { id: 'sms-r-1', field: 'Canned response templates', description: 'Templates to be used for canned responses.' },
+      { id: 'sms-r-2', field: 'Outbound or two-way', description: 'Confirmation of whether SMS needs to be outbound or two way conversational.' },
+      { id: 'sms-r-3', field: 'Interaction credit', description: 'Sufficient interaction credit needs to be added to the account.' },
     ],
   },
   {
@@ -334,360 +168,581 @@ export const SERVICES: Service[] = [
     name: 'Email',
     category: 'channel',
     icon: 'Mail',
-    description: 'Inbound email-to-ticket, outbound email campaigns.',
+    description: 'IMAP/SMTP integration with current mail servers + canned responses.',
     enabledByDefault: false,
+    intro: 'Your MassaPro Technical Services Engineer will deploy Email to <client name>.',
     tasks: [
       {
         id: 'em-1',
-        title: 'Connect email account',
-        description: 'IMAP/SMTP or OAuth connect to shared mailbox.',
-        estimatedHours: 4,
+        title: 'Integrate with current mail servers',
+        description: "MassaPro will integrate with <client name>'s current mail servers to allow emails to be sent and received from the MassaPro platform.",
+        estimatedHours: 6,
         category: 'channel',
       },
       {
         id: 'em-2',
-        title: 'Email routing & assignment',
-        description: 'Parse inbound, route by subject/sender, assign to agent queues.',
-        estimatedHours: 8,
-        category: 'channel',
-      },
-      {
-        id: 'em-3',
-        title: 'Templates & signatures',
-        description: 'Build outbound templates, signature blocks, disclaimers.',
-        estimatedHours: 6,
+        title: 'Set up auto and canned responses',
+        description: 'Your Technical Services Engineer will assist with the setup and assignment of auto and canned responses as required.',
+        estimatedHours: 4,
         category: 'channel',
       },
     ],
     techSpecs: [
-      { id: 'em-spec-1', field: 'Mailbox', description: 'Shared mailbox address.', example: 'support@client.com' },
-      { id: 'em-spec-2', field: 'Protocol', description: 'IMAP / SMTP / OAuth.', example: 'OAuth (Microsoft 365)' },
+      { id: 'em-r-1', field: 'Email credentials', description: 'Confirmation of the usernames and passwords for email accounts.' },
+      { id: 'em-r-2', field: 'IMAP/SMTP addresses', description: 'Confirmation of address for both IMAP and SMTP connections.' },
+      { id: 'em-r-3', field: 'IMAP/SMTP ports', description: 'Confirmation of relevant ports for IMAP and SMTP connectivity.' },
+      { id: 'em-r-4', field: 'Test email account', description: 'An email account which will be used for testing purposes.' },
+      { id: 'em-r-5', field: 'Canned response templates', description: 'Templates to be used for canned responses.' },
+      { id: 'em-r-6', field: 'Admin portal access', description: 'Access and permissions to your admin portal for your email platform for the purpose of multi factor authentication e.g. your Azure directory.' },
     ],
   },
   {
-    id: 'social',
-    name: 'Facebook & Instagram',
+    id: 'livechat',
+    name: 'Live Chat',
+    category: 'channel',
+    icon: 'MessageSquare',
+    description: 'Concurrent live chat on website with canned responses and SLA.',
+    enabledByDefault: false,
+    intro: 'Your MassaPro Technical Services Engineer will deploy Live Chat to <client name>.',
+    tasks: [
+      {
+        id: 'lc-1',
+        title: 'Configure Live Chat application and script',
+        description:
+          'The MassaPro Live Chat application will be configured and the associated script made available to <client name> for deployment on its website (https://www.<client name>.com).',
+        estimatedHours: 6,
+        category: 'channel',
+      },
+      {
+        id: 'lc-2',
+        title: 'Enable concurrent live chat servicing',
+        description: 'MassaPro Live Chat enables configuration for a user to concurrently service multiple Live Chats.',
+        estimatedHours: 2,
+        category: 'channel',
+      },
+      {
+        id: 'lc-3',
+        title: 'Activate canned responses, routing and SLA',
+        description: 'Canned responses, intelligent routing and SLA functionality are all available.',
+        estimatedHours: 4,
+        category: 'channel',
+      },
+    ],
+    techSpecs: [
+      { id: 'lc-r-1', field: 'Test website', description: 'Test website environment provided by <client name> which will be used for testing.' },
+      { id: 'lc-r-2', field: 'Current workflow', description: "<client name>'s current Live Chat workflow." },
+    ],
+  },
+  {
+    id: 'whatsapp',
+    name: 'WhatsApp',
+    category: 'channel',
+    icon: 'MessageCircle',
+    description: 'WhatsApp for Business API with two-way conversations and templates.',
+    enabledByDefault: false,
+    intro: 'Your MassaPro Technical Services Engineer will deploy WhatsApp to <client name>.',
+    tasks: [
+      {
+        id: 'wa-1',
+        title: 'Set up WhatsApp for Business API',
+        description: 'The WhatsApp for Business API will be set up to enable two-way WhatsApp conversations.',
+        estimatedHours: 6,
+        category: 'channel',
+      },
+      {
+        id: 'wa-2',
+        title: 'Train on template creation and management',
+        description: 'Your Technical Services Engineer will provide training on the creation and management of templates.',
+        estimatedHours: 3,
+        category: 'channel',
+      },
+      {
+        id: 'wa-3',
+        title: 'Provision new WhatsApp number',
+        description: "The MassaPro carrier team will provision a new WhatsApp number for <client name> and assist with the number set up process.",
+        estimatedHours: 4,
+        category: 'channel',
+      },
+    ],
+    techSpecs: [
+      { id: 'wa-r-1', field: 'Verified Meta Business', description: 'Verified Meta Business account.' },
+      { id: 'wa-r-2', field: 'Meta Business access', description: 'Provide admin access and permissions to verified Meta Business account.' },
+      { id: 'wa-r-3', field: 'WhatsApp area code', description: 'Confirmation of the preferred WhatsApp number area code(s).' },
+      { id: 'wa-r-4', field: 'Template messages', description: 'Template WhatsApp messages.' },
+      { id: 'wa-r-5', field: 'Interaction credit', description: 'Sufficient interaction credit needs to be added to the account.' },
+    ],
+  },
+  {
+    id: 'facebook',
+    name: 'Facebook',
     category: 'channel',
     icon: 'Share2',
-    description: 'FB Messenger and Instagram DM unified inbox.',
+    description: 'Facebook Page wall-post comments and Messenger messages.',
     enabledByDefault: false,
+    intro: 'Your MassaPro Technical Services Engineer will deploy Facebook to <client name>.',
     tasks: [
       {
-        id: 'soc-1',
-        title: 'Connect FB/IG pages',
-        description: 'OAuth Meta Business, link pages and Instagram accounts.',
-        estimatedHours: 6,
+        id: 'fb-1',
+        title: 'Link Facebook Page to MassaPro Social Service',
+        description:
+          '<client name> will link up a Facebook Page to the MassaPro Social Service application within the CXM platform. Once the account is connected, <client name> will have the ability to:',
+        estimatedHours: 4,
         category: 'channel',
+        subTasks: [
+          { id: 'fb-1a', title: 'Respond to Facebook wall post comments', description: 'Reply to public comments on wall posts.' },
+          { id: 'fb-1b', title: 'Send and receive Facebook Messenger messages', description: 'Two-way Messenger conversations.' },
+        ],
       },
       {
-        id: 'soc-2',
-        title: 'Build DM routing',
-        description: 'Inbound DM routing to agent inbox, comment auto-reply, bot handoff.',
-        estimatedHours: 8,
+        id: 'fb-2',
+        title: 'Assist with Meta Business account setup',
+        description: 'The Technical Services Engineer can assist <client name> in completing the setup of your Meta Business account if required.',
+        estimatedHours: 3,
         category: 'channel',
       },
     ],
     techSpecs: [
-      { id: 'soc-spec-1', field: 'FB Page', description: 'Connected Facebook page name.', example: 'Acme Support' },
-      { id: 'soc-spec-2', field: 'IG account', description: 'Connected Instagram handle.', example: '@acme.support' },
+      { id: 'fb-r-1', field: 'Verified Meta Business', description: 'Verified Meta Business account.' },
+      { id: 'fb-r-2', field: 'Meta Business access', description: 'Provide admin access and permissions to verified Meta Business account.' },
+      { id: 'fb-r-3', field: 'Facebook Business page', description: 'Facebook Business page.' },
+      { id: 'fb-r-4', field: 'Interaction credit', description: 'Sufficient interaction credit needs to be added to the account.' },
     ],
   },
   {
-    id: 'ticketing',
-    name: 'Ticketing',
+    id: 'instagram',
+    name: 'Instagram',
     category: 'channel',
-    icon: 'Ticket',
-    description: 'Unified ticketing across channels with SLAs.',
+    icon: 'Instagram',
+    description: 'Instagram Business — direct messages and post comments.',
     enabledByDefault: false,
+    intro: 'Your MassaPro Technical Services Engineer will deploy Instagram to <client name>.',
     tasks: [
       {
-        id: 'tk-1',
-        title: 'Configure ticket categories',
-        description: 'Build category / subcategory taxonomy, priority levels, SLA per category.',
-        estimatedHours: 8,
+        id: 'ig-1',
+        title: 'Link FB Page and Instagram page to MassaPro Social Service',
+        description:
+          '<client name> will link up a Facebook Business page and Instagram Business page to the MassaPro Social Service application within the CXM platform. Once the accounts are connected, <client name> will have the ability to perform the following actions:',
+        estimatedHours: 4,
+        category: 'channel',
+        subTasks: [
+          { id: 'ig-1a', title: 'Send Instagram direct messages', description: 'Two-way DM conversations.' },
+          { id: 'ig-1b', title: 'Reply to comments on Instagram posts', description: 'Public-comment replies.' },
+        ],
+      },
+    ],
+    techSpecs: [
+      { id: 'ig-r-1', field: 'Instagram Business account', description: 'MassaPro will provide <client name> with the ability to connect its Instagram Business account to the MassaPro system.' },
+      { id: 'ig-r-2', field: 'Verified Meta Business', description: 'Verified Meta Business account.' },
+      { id: 'ig-r-3', field: 'Meta Business access', description: 'Provide admin access and permissions to verified Meta Business account.' },
+      { id: 'ig-r-4', field: 'Instagram Business page', description: 'Instagram Business page.' },
+      { id: 'ig-r-5', field: 'Interaction credit', description: 'Sufficient interaction credit needs to be added to the account.' },
+    ],
+  },
+  {
+    id: 'twitter',
+    name: 'X (Twitter)',
+    category: 'channel',
+    icon: 'Twitter',
+    description: 'X (Twitter) integration (currently in preview).',
+    enabledByDefault: false,
+    intro: 'Your MassaPro Technical Services Engineer will deploy X (Twitter) to <client name>.',
+    tasks: [
+      {
+        id: 'tw-1',
+        title: 'Connect X (Twitter) account to MassaPro',
+        description:
+          'MassaPro will provide <client name> with the ability to connect its X (Twitter) account to the MassaPro system. The X (Twitter) functionality is not yet fully released on the MassaPro platform. As soon as this is released, the Technical Services Engineer can assist <client name> in completing the setup of the X (Twitter) functionality within the MassaPro system.',
+        estimatedHours: 4,
         category: 'channel',
       },
+    ],
+    techSpecs: [
+      { id: 'tw-r-1', field: 'X account', description: 'X (Twitter) account credentials.' },
+    ],
+  },
+  // ====== PRODUCTIVITY / AI / QUALITY =====================================
+  {
+    id: 'dashboard',
+    name: 'Dashboard Builder',
+    category: 'productivity',
+    icon: 'LayoutDashboard',
+    description: 'Personalised dashboards with tiles for CXM data and metrics.',
+    enabledByDefault: true,
+    intro: 'Your MassaPro Technical Services Engineer will deploy Dashboard Builder to <client name>.',
+    tasks: [
       {
-        id: 'tk-2',
-        title: 'Build ticket forms',
-        description: 'Custom fields, custom statuses, automations and triggers.',
-        estimatedHours: 10,
-        category: 'channel',
+        id: 'db-1',
+        title: 'Configure Dashboard Builder',
+        description: 'Dashboard Builder will allow the ability to create and build personalised dashboards that help present your CXM data.',
+        estimatedHours: 6,
+        category: 'productivity',
       },
       {
-        id: 'tk-3',
-        title: 'SLA & escalation',
-        description: 'Set SLA timers, escalation rules and breach notifications.',
-        estimatedHours: 6,
-        category: 'channel',
+        id: 'db-2',
+        title: 'Set up dashboard tiles and metrics',
+        description:
+          'Dashboards are made up of tiles, with each tile providing key metrics on CXM activity. This includes: Call data, User statistics, Interaction data, CNX1 Live data.',
+        estimatedHours: 8,
+        category: 'productivity',
+      },
+      {
+        id: 'db-3',
+        title: 'Configure presentation formats',
+        description: '<client name> will be able to present these metrics in a variety of different formats, such as line graphs and pie charts.',
+        estimatedHours: 4,
+        category: 'productivity',
       },
     ],
     techSpecs: [
-      { id: 'tk-spec-1', field: 'Channels merged', description: 'Channels feeding the ticket queue.', example: 'Email, WhatsApp, Web' },
-      { id: 'tk-spec-2', field: 'SLA tiers', description: 'SLA per priority.', example: 'P1: 1h, P2: 4h, P3: 24h' },
+      { id: 'db-r-1', field: 'Current dashboard examples', description: 'Any examples of dashboards or wallboards currently used by <client name>.' },
     ],
   },
-  // ---- INFRASTRUCTURE -------------------------------------------------------
   {
-    id: 'sip',
-    name: 'SIP Trunk',
-    category: 'infrastructure',
-    icon: 'Network',
-    description: 'SIP trunk to client PBX or carrier with failover.',
+    id: 'quality',
+    name: 'Quality',
+    category: 'productivity',
+    icon: 'Award',
+    description: 'Scorecards and Assessment Center for agent interaction quality.',
     enabledByDefault: false,
+    intro: 'Your MassaPro Technical Services Engineer will deploy Quality to <client name>.',
     tasks: [
       {
-        id: 'sip-1',
-        title: 'Provision SIP trunk',
-        description: 'Configure trunk to client PBX/carrier, codecs, DTMF mode.',
-        estimatedHours: 8,
-        category: 'infrastructure',
+        id: 'qa-1',
+        title: 'Enable scorecard creation and management',
+        description: 'MassaPro will provide ability to create and manage scorecards in the Quality module in order to measure the quality of agents\' interactions.',
+        estimatedHours: 6,
+        category: 'productivity',
       },
       {
-        id: 'sip-2',
-        title: 'Inbound routing per trunk',
-        description: 'Map DIDs to internal destinations, set failover to backup trunk.',
+        id: 'qa-2',
+        title: 'Set up Assessment Center',
+        description: 'The Assessment Center can be used to assess quality of statistics related to agent performance such as call scores and sentiment scores of agent calls.',
         estimatedHours: 6,
-        category: 'infrastructure',
+        category: 'productivity',
       },
       {
-        id: 'sip-3',
-        title: 'SIP security',
-        description: 'IP allowlist, TLS/SRTP, digest auth, toll-fraud protection.',
-        estimatedHours: 6,
-        category: 'infrastructure',
+        id: 'qa-3',
+        title: 'Set up users, teams and roles',
+        description: 'Your Technical Services Engineer will also assist in the set up of users, teams and roles.',
+        estimatedHours: 4,
+        category: 'productivity',
       },
     ],
     techSpecs: [
-      { id: 'sip-spec-1', field: 'Provider', description: 'Carrier or PBX vendor.', example: 'Twilio SIP' },
-      { id: 'sip-spec-2', field: 'Codecs', description: 'Audio codecs.', example: 'G.711u, G.729' },
-      { id: 'sip-spec-3', field: 'DTMF', description: 'DTMF transport.', example: 'RFC2833' },
+      { id: 'qa-r-1', field: 'Example scorecards', description: 'Example scorecards.' },
+      { id: 'qa-r-2', field: 'Current QM process', description: 'Information on the current Quality Management process.' },
     ],
   },
   {
-    id: 'crm',
-    name: 'CRM / DB Integration',
-    category: 'infrastructure',
-    icon: 'Database',
-    description: 'Bidirectional sync with CRM/DB (Salesforce, HubSpot, custom).',
-    enabledByDefault: true,
-    tasks: [
-      {
-        id: 'crm-1',
-        title: 'CRM discovery & mapping',
-        description: 'Identify CRM objects to sync, field mapping, write-back rules.',
-        estimatedHours: 8,
-        category: 'infrastructure',
-      },
-      {
-        id: 'crm-2',
-        title: 'Build integration',
-        description: 'Use MassaPro connector or REST API to sync contacts, tickets, activities.',
-        estimatedHours: 16,
-        category: 'infrastructure',
-      },
-      {
-        id: 'crm-3',
-        title: 'Screen-pop & click-to-call',
-        description: 'Agent screen-pop on inbound, click-to-call from CRM, activity logging.',
-        estimatedHours: 10,
-        category: 'infrastructure',
-      },
-    ],
-    techSpecs: [
-      { id: 'crm-spec-1', field: 'CRM platform', description: 'CRM system name.', example: 'Salesforce Service Cloud' },
-      { id: 'crm-spec-2', field: 'Auth', description: 'Auth method.', example: 'OAuth 2.0' },
-      { id: 'crm-spec-3', field: 'Sync direction', description: 'Bi-directional / one-way.', example: 'Bi-directional' },
-    ],
-  },
-  {
-    id: 'reports',
-    name: 'Reports & Analytics',
-    category: 'infrastructure',
-    icon: 'BarChart3',
-    description: 'Realtime dashboards, scheduled reports and custom KPIs.',
-    enabledByDefault: true,
-    tasks: [
-      {
-        id: 'rep-1',
-        title: 'Define KPIs & report list',
-        description: 'Workshop with stakeholder to agree on KPIs and report schedule.',
-        estimatedHours: 6,
-        category: 'infrastructure',
-      },
-      {
-        id: 'rep-2',
-        title: 'Build standard dashboards',
-        description: 'Realtime wallboards, agent performance, queue health.',
-        estimatedHours: 10,
-        category: 'infrastructure',
-      },
-      {
-        id: 'rep-3',
-        title: 'Scheduled exports',
-        description: 'CSV/PDF/email reports on daily / weekly / monthly cadence.',
-        estimatedHours: 6,
-        category: 'infrastructure',
-      },
-    ],
-    techSpecs: [
-      { id: 'rep-spec-1', field: 'KPIs', description: 'KPIs to track.', example: 'SL, AHT, FCR, CSAT' },
-      { id: 'rep-spec-2', field: 'Cadence', description: 'Report cadence.', example: 'Daily, weekly, monthly' },
-    ],
-  },
-  // ---- DATA -----------------------------------------------------------------
-  {
-    id: 'import',
-    name: 'Initial Data Import',
-    category: 'data',
-    icon: 'Upload',
-    description: 'Bulk import of leads, contacts, knowledge base and prompts.',
+    id: 'wfo',
+    name: 'Quality Management (WFO)',
+    category: 'productivity',
+    icon: 'ClipboardCheck',
+    description: 'Workforce-optimisation grade QM with Assessment Center.',
     enabledByDefault: false,
+    intro: 'Your MassaPro Technical Services Engineer will deploy Quality Management (WFO) to <client name>.',
     tasks: [
       {
-        id: 'imp-1',
-        title: 'Data discovery & mapping',
-        description: 'Identify source data, format, dedupe rules and target schema.',
+        id: 'wfo-1',
+        title: 'Enable WFO scorecards',
+        description: 'MassaPro will provide ability to create and manage scorecards in WFO in order to measure the quality of agents\' interactions.',
         estimatedHours: 6,
-        category: 'data',
+        category: 'productivity',
       },
       {
-        id: 'imp-2',
-        title: 'Execute import',
-        description: 'Run import in staging, validate, then promote to production.',
+        id: 'wfo-2',
+        title: 'Set up QM Assessment Center',
+        description: 'The QM Assessment Center can be used to assess quality of statistics related to agent performance such as call scores and sentiment scores of agent calls.',
+        estimatedHours: 6,
+        category: 'productivity',
+      },
+      {
+        id: 'wfo-3',
+        title: 'Set up users, teams and roles',
+        description: 'Your Technical Services Engineer will also assist in the set up of user, teams and roles.',
+        estimatedHours: 4,
+        category: 'productivity',
+      },
+    ],
+    techSpecs: [
+      { id: 'wfo-r-1', field: 'Example scorecards', description: 'Example scorecards.' },
+      { id: 'wfo-r-2', field: 'Current QM process', description: 'Information on current Quality Management process.' },
+    ],
+  },
+  {
+    id: 'athena-agent',
+    name: 'Athena AI Agent',
+    category: 'productivity',
+    icon: 'Bot',
+    description: 'Conversational AI with custom journeys and trained LLM.',
+    enabledByDefault: false,
+    intro: 'Your MassaPro Technical Services Engineer will deploy AI Agent to <client name>.',
+    tasks: [
+      {
+        id: 'aa-1',
+        title: 'Enable conversational AI',
+        description: 'AI Agent will allow <client name> to utilise conversational AI to converse with customers.',
         estimatedHours: 8,
-        category: 'data',
+        category: 'productivity',
       },
       {
-        id: 'imp-3',
-        title: 'Validation sign-off',
-        description: 'Stakeholder sign-off on imported records, rollback plan if needed.',
-        estimatedHours: 4,
-        category: 'data',
-      },
-    ],
-    techSpecs: [
-      { id: 'imp-spec-1', field: 'Source', description: 'Source of data.', example: 'CSV, Salesforce export' },
-      { id: 'imp-spec-2', field: 'Volume', description: 'Approximate record count.', example: '50,000 contacts' },
-    ],
-  },
-  {
-    id: 'storage',
-    name: 'Customer Data Storage',
-    category: 'data',
-    icon: 'HardDrive',
-    description: 'Storage of PII, recordings and chat transcripts (retention & residency).',
-    enabledByDefault: true,
-    tasks: [
-      {
-        id: 'st-1',
-        title: 'Define retention policy',
-        description: 'Set retention for recordings, transcripts, PII per compliance.',
-        estimatedHours: 4,
-        category: 'data',
-      },
-      {
-        id: 'st-2',
-        title: 'Data residency',
-        description: 'Choose storage region to meet GDPR/HIPAA/etc.',
-        estimatedHours: 4,
-        category: 'data',
-      },
-    ],
-    techSpecs: [
-      { id: 'st-spec-1', field: 'Region', description: 'Storage region.', example: 'EU-Frankfurt' },
-      { id: 'st-spec-2', field: 'Retention', description: 'Retention period.', example: '12 months' },
-    ],
-  },
-  // ---- OPS ------------------------------------------------------------------
-  {
-    id: 'security',
-    name: 'Security & SSO',
-    category: 'ops',
-    icon: 'ShieldCheck',
-    description: 'SSO, MFA, role-based access and audit logging.',
-    enabledByDefault: true,
-    tasks: [
-      {
-        id: 'sec-1',
-        title: 'SSO integration',
-        description: 'SAML / OIDC SSO with client IdP, group/role mapping.',
+        id: 'aa-2',
+        title: 'Configure AI Agent Control Panel',
+        description: "MassaPro's AI Agent Control Panel will allow users to build their own journeys and train personalised LLM on their own data.",
         estimatedHours: 10,
-        category: 'ops',
+        category: 'productivity',
       },
       {
-        id: 'sec-2',
-        title: 'Roles & permissions',
-        description: 'Define role hierarchy, per-queue permissions, supervisor scope.',
-        estimatedHours: 6,
-        category: 'ops',
-      },
-      {
-        id: 'sec-3',
-        title: 'Audit logging',
-        description: 'Enable audit log for admin actions, exports and access.',
+        id: 'aa-3',
+        title: 'Set up users, roles and tracking',
+        description: 'Your Technical Services Engineer will assist in the creation of Users, Roles and tracking data through AI Reporting.',
         estimatedHours: 4,
-        category: 'ops',
+        category: 'productivity',
+      },
+      {
+        id: 'aa-4',
+        title: 'Train on journeys, training data and slot intents',
+        description: 'Your Technical Services Engineer will also provide training on the creation of journeys, training data and managing slot intents.',
+        estimatedHours: 6,
+        category: 'productivity',
       },
     ],
     techSpecs: [
-      { id: 'sec-spec-1', field: 'IdP', description: 'Identity provider.', example: 'Azure AD' },
-      { id: 'sec-spec-2', field: 'MFA', description: 'MFA enforcement.', example: 'Required for admins' },
+      { id: 'aa-r-1', field: 'Customer journeys', description: 'Documented customer journeys.' },
+      { id: 'aa-r-2', field: 'Knowledge Base articles', description: 'Knowledge Base Articles for your organisation and processes.' },
     ],
   },
+  {
+    id: 'athena-tts',
+    name: 'Athena AI Voice (TTS)',
+    category: 'productivity',
+    icon: 'Volume2',
+    description: 'AI Text-to-Speech with custom voices to suit your brand.',
+    enabledByDefault: false,
+    intro: 'Your MassaPro Technical Services Engineer will deploy Athena AI Voice to <client name>.',
+    tasks: [
+      {
+        id: 'tts-1',
+        title: 'Enable Athena AI Voice (TTS)',
+        description: 'AI Voice will allow <client name> to utilise AI Text-To-Speech to respond to customers in a variety of custom AI Voices.',
+        estimatedHours: 6,
+        category: 'productivity',
+      },
+      {
+        id: 'tts-2',
+        title: 'Configure AI Voice node',
+        description: "MassaPro's AI Voice node allows responses to be created to respond to transcripts captured using Athena ASR. These responses can be personalised to create a voice to suit your brand.",
+        estimatedHours: 6,
+        category: 'productivity',
+      },
+    ],
+    techSpecs: [
+      { id: 'tts-r-1', field: 'TTS scenarios', description: 'Documented TTS Scenarios.' },
+      { id: 'tts-r-2', field: 'Custom voice audio', description: 'Audio Files MassaPro can use to provide custom voices.' },
+    ],
+  },
+  {
+    id: 'athena-asr',
+    name: 'Athena Speech Recognition (ASR)',
+    category: 'productivity',
+    icon: 'Mic',
+    description: 'Automatic Speech Recognition feeding IVR menus.',
+    enabledByDefault: false,
+    intro: 'Your MassaPro Technical Services Engineer will deploy Athena ASR to <client name>.',
+    tasks: [
+      {
+        id: 'asr-1',
+        title: 'Enable Athena ASR',
+        description: 'Automatic Speech Recognition (ASR) will allow <client name> to capture responses from customers as they speak.',
+        estimatedHours: 6,
+        category: 'productivity',
+      },
+      {
+        id: 'asr-2',
+        title: 'Build sophisticated IVR menus',
+        description: "MassaPro's Athena ASR node allows these responses to be utilised to create sophisticated interactive voice response (IVR) menus.",
+        estimatedHours: 8,
+        category: 'productivity',
+      },
+    ],
+    techSpecs: [
+      { id: 'asr-r-1', field: 'IVR flows', description: 'Documented IVR flows.' },
+      { id: 'asr-r-2', field: 'IVR audio files', description: 'Audio files for IVR prompts and out of hours messages.' },
+    ],
+  },
+  // ====== INFRASTRUCTURE ==================================================
+  {
+    id: 'integration',
+    name: 'Integration (Phase 2)',
+    category: 'infrastructure',
+    icon: 'Plug',
+    description: 'Custom integration with a 3rd-party product (spec agreed upfront).',
+    enabledByDefault: false,
+    intro: '<client name> require MassaPro to integrate with <product>.',
+    tasks: [
+      {
+        id: 'int-1',
+        title: 'Agree integration specification',
+        description: 'A full specification detailing the setup of the integration will be agreed between both parties before any development work begins.',
+        estimatedHours: 12,
+        category: 'infrastructure',
+      },
+      {
+        id: 'int-2',
+        title: 'Complete the integration',
+        description: 'Once the specification is agreed, MassaPro will assist <client name> with completing the integration.',
+        estimatedHours: 40,
+        category: 'infrastructure',
+      },
+    ],
+    techSpecs: [
+      { id: 'int-r-1', field: 'Target product', description: 'The product to integrate with (e.g., Salesforce, Zendesk, custom CRM).' },
+      { id: 'int-r-2', field: 'Auth method', description: 'API key / OAuth / SSO.' },
+      { id: 'int-r-3', field: 'Data scope', description: 'Records / fields to sync.' },
+    ],
+  },
+  // ====== OPERATIONS ======================================================
   {
     id: 'training',
     name: 'Training & Handover',
     category: 'ops',
     icon: 'GraduationCap',
-    description: 'Admin training, agent enablement and go-live support.',
+    description: 'Remote training with Technical Services Engineer + Go-Live support.',
     enabledByDefault: true,
+    intro: 'Your MassaPro Technical Services Engineer will deliver training and handover to <client name>.',
     tasks: [
       {
         id: 'tr-1',
-        title: 'Admin training',
-        description: 'Two-day admin training covering configuration, monitoring, reporting.',
-        estimatedHours: 16,
-        category: 'ops',
-      },
-      {
-        id: 'tr-2',
-        title: 'Agent enablement',
-        description: 'Agent quick-start guide, softphone training, QA calibration.',
+        title: 'Remote training with Technical Services Engineer',
+        description: 'Remote training with Technical Services Engineer.',
         estimatedHours: 8,
         category: 'ops',
       },
       {
-        id: 'tr-3',
-        title: 'Go-live hypercare',
-        description: 'Five business days of on-site/remote hypercare post go-live.',
+        id: 'tr-2',
+        title: 'Dedicated Technical Services Engineer support for Go-Live',
+        description: 'Further dedicated Technical Services Engineer support for full Go-Live.',
         estimatedHours: 40,
         category: 'ops',
       },
     ],
     techSpecs: [
-      { id: 'tr-spec-1', field: 'Trainees', description: 'Number of admins / agents trained.', example: '4 admins, 25 agents' },
+      { id: 'tr-r-1', field: 'Trainees', description: 'Number of admins / agents trained.' },
+      { id: 'tr-r-2', field: 'Go-Live date', description: 'Target Go-Live date.' },
     ],
   },
 ]
 
 // ---------------------------------------------------------------------------
+// Project Milestones — default table from the Connex template
+// ---------------------------------------------------------------------------
+export interface MilestoneRow {
+  id: string
+  task: string
+  targetDate: string
+  status: string
+}
+
+export const DEFAULT_MILESTONES: MilestoneRow[] = [
+  { id: 'm1', task: 'Intro Call', targetDate: 'XX/XX/2026', status: 'Complete' },
+  { id: 'm2', task: 'Pre-Training Chat', targetDate: 'XX/XX/2026', status: 'Complete' },
+  { id: 'm3', task: 'System Installation', targetDate: 'XX/XX/2026', status: 'Scheduled' },
+  { id: 'm4', task: 'System Configuration', targetDate: 'Commencing XX/XX/2026', status: 'Scheduled' },
+  { id: 'm5', task: 'System Training', targetDate: 'Commencing XX/XX/2026', status: 'Scheduled' },
+  { id: 'm6', task: 'Project Check In Meetings', targetDate: 'Commencing XX/XX/2026', status: 'Scheduled' },
+  { id: 'm7', task: 'Go Live', targetDate: 'To be Confirmed', status: 'Pending' },
+]
+
+// ---------------------------------------------------------------------------
+// Infrastructure & Access Requirements — default from the Connex template
+// ---------------------------------------------------------------------------
+export const INFRA_REQUIREMENTS = {
+  preDeployment: [
+    'Interaction credit proforma and licence invoice need to be paid',
+    'IP Address Whitelisting: Access to non-Public Access MassaPro servers is restricted by IP address, the head office IP address will be whitelisted for access.',
+    'Remote agents who are not connecting to a non-Public Access server via the head office will require a VPN (to provide static IP address) and their IP address whitelisting before they are able to connect to any new servers.',
+  ],
+  hardware: [
+    'Windows 10+',
+    'i5 Processor',
+    '8GB RAM',
+    'USB headsets',
+  ],
+  internet: [
+    '0.25Mbps per agent',
+    'CAT5e+ Cabling',
+    'Static IP',
+  ],
+}
+
+// ---------------------------------------------------------------------------
+// Support — default content from the Connex template
+// ---------------------------------------------------------------------------
+export const SUPPORT_SECTIONS = {
+  intro: '24/7 Support',
+  supportService: [
+    'The MassaPro dedicated Support team are on hand 24/7 to assist you with any queries you may have, assistance you may need or issues you need resolving.',
+    'You can contact your Support team via call, email and live chat.',
+  ],
+  supportPortal: [
+    'Utilise our support portal to browse knowledge base articles (KBAs) which provide detailed information on how to get the most out of your MassaPro system.',
+    'https://support.massapro.com/',
+  ],
+  ticketSubmission: [
+    'When submitting tickets to the MassaPro Support team via email, we kindly ask if you could please do so using the following template. If you do not have all the required information, please just provide as much information as possible.',
+    'Submitting tickets with this information will assist the Support team in troubleshooting and will speed up the investigation process.',
+  ],
+  ticketTemplate: [
+    'Date:',
+    'Time:',
+    'Channel: (E.g. Voice, Live Chat, Email, WhatsApp)',
+    'Campaign:',
+    'Agent:',
+    'Affected Node or Server:',
+    'Description of issue/task:',
+    'Replication Steps:',
+    'Checks completed by the Customer:',
+    'Screenshot of the issue if applicable:',
+  ],
+}
+
+// ---------------------------------------------------------------------------
+// Welcome — content from the Connex template cover page
+// ---------------------------------------------------------------------------
+export const WELCOME_PARAGRAPHS = {
+  subtitle: 'A Technology Partnership',
+  intro:
+    'Omnichannel will reshape your organisation\'s day-to-day operations; from increasing your team\'s productivity to having the ability to customise business strategies to adapt to your customer needs.',
+  body:
+    'The MassaPro platform is a powerful tool that will provide a more in-depth insight and analysis of your customers\' requirements than ever before, enabling your teams to provide industry leading service and increase your customer satisfaction.',
+  benefits: [
+    'Introduce a highly personalised service by appointing an experienced Technical Services Engineer to manage all your training and onboarding requirements',
+    'Drive compliance to meet your clients SLAs with performance and productivity monitoring features',
+    'Reduce the time it takes per interaction with our productivity enhancing algorithms and technology',
+    'Give your team greater peace of mind with full 24/7 support for every user',
+    'More in-depth insight into your campaigns, teams and strategy; providing your management team with much more at just a glance',
+  ],
+  closing:
+    'As market leaders in contact centre solutions, we understand how to positively shape every customer interaction experience by harnessing the right insights, expertise and technology. From the start of our partnership, we will work together to optimise feature usage and drive productivity, delivering success throughout your teams.',
+  retention:
+    'What\'s more, with a client retention rate of over 97%, we are renowned for exceptional service and the powerful technology we offer.',
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
 export const CATEGORY_LABELS: Record<ServiceCategory, string> = {
   channel: 'Communication Channels',
-  voice: 'Voice Features',
-  infrastructure: 'Infrastructure',
-  data: 'Data',
+  productivity: 'AI, Quality & Dashboards',
+  infrastructure: 'Integrations',
   ops: 'Operations',
 }
 
-// Apply brand-text replacement: Connex / ConnexAI → MassaPro / MassaProAI
+// Apply brand-text replacement: Connex / ConnexAI → MassaPro
 // Used by the Word export and the on-screen preview.
 export function brandClean(text: string): string {
   return text
-    .replace(/\bConnexAI\b/gi, 'MassaProAI')
+    .replace(/\bConnexAI\b/gi, 'MassaPro')
     .replace(/\bConnex\b/gi, 'MassaPro')
 }
 
