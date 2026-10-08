@@ -43,6 +43,8 @@ model User {
   assignedTickets     SupportTicket[]  @relation("AssignedTickets")
   ticketComments      TicketComment[]
   sowSnapshots        SOWSnapshot[]    @relation("OwnedSOWSnapshots")
+  ownedDemos          Demo[]           @relation("OwnedDemos")
+  demoAccesses        DemoAccess[]     @relation("DemoAccesses")
 }
 
 // Self-relation note: User.approvedBy stores the id of the super_admin who
@@ -54,6 +56,8 @@ model Scenario {
   id                        String            @id @default(cuid())
   clientId                  String
   client                    User              @relation(fields: [clientId], references: [id])
+  demoId                    String?           // FK to Demo (new hierarchy). Nullable for backward compat — migration back-fills existing scenarios into a "Default Demo" container.
+  demo                      Demo?             @relation(fields: [demoId], references: [id], onDelete: SetNull)
   name                      String
   order                     Int               @default(0)
   status                    String            @default("draft") // "draft" or "submitted"
@@ -99,7 +103,7 @@ model Scenario {
   erpCrmCcaasHe             String?
   submittedDate             DateTime?
   createdAt                 DateTime          @default(now())
-  updatedAt                 DateTime          @updatedAt
+  updatedAt                 DateTime         @updatedAt
   kpis                      KPI[]
   attachments               Attachment[]
   links                    ScenarioLink[]
@@ -392,6 +396,50 @@ model Invite {
 // ---------------------------------------------------------------------------
 // NEW MODELS — Task 21 (Demo Platform, Hierarchical User Management, Support)
 // ---------------------------------------------------------------------------
+
+// A Demo is the top-level container in the demo-platform hierarchy.
+// Each Demo has an owner (the user who created it) and can have multiple
+// Scenarios. Other users can be granted access to a Demo via DemoAccess
+// rows (view / comment / edit). A Demo is required to create a Scenario.
+//
+// Migration back-fills any existing Scenarios that don't have a demoId
+// into a per-owner "Default Demo" container.
+//
+// Visibility rule (per the user's brief):
+//   - super_admin: sees ALL Demos and Scenarios
+//   - admin: sees ALL Demos and Scenarios (same as super_admin for read)
+//   - regular user: sees ONLY Demos where they're the owner OR have a
+//     DemoAccess row with accessLevel 'view' / 'comment' / 'edit'.
+//     Any Scenario whose Demo they can't see is hidden from ALL tabs
+//     (Demo list, Scenarios list, Export).
+model Demo {
+  id          String     @id @default(cuid())
+  name        String
+  description String?
+  ownerId     String     // user who created the Demo
+  owner       User       @relation("OwnedDemos", fields: [ownerId], references: [id])
+  status      String     @default("active") // "active" or "archived"
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  scenarios   Scenario[]
+  access      DemoAccess[]
+}
+
+// DemoAccess grants a specific user access to a specific Demo.
+// accessLevel: 'view' (read-only), 'comment' (read + comment), 'edit' (full).
+// One row per (demoId, userId) pair.
+model DemoAccess {
+  id          String   @id @default(cuid())
+  demoId      String
+  demo        Demo     @relation(fields: [demoId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation("DemoAccesses", fields: [userId], references: [id], onDelete: Cascade)
+  accessLevel String   @default("view") // "view" | "comment" | "edit"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([demoId, userId])
+}
 
 // A Company is a top-level unit in the user hierarchy. Users belong to a
 // Company. Each Company has multiple Teams. Only super_admin can create,

@@ -2,7 +2,7 @@
 
 import { useLanguage } from '@/hooks/useLanguage'
 import { signOut, useSession } from 'next-auth/react'
-import { Globe, LogOut, Shield, LayoutDashboard, Crown, Plug, FileText } from 'lucide-react'
+import { Globe, LogOut, Shield, LayoutDashboard, Crown, Plug, FileText, UserCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -135,6 +135,13 @@ export default function MassaProHeader() {
                   )}
                 </div>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => { router.push('/profile') }}
+                  className="cursor-pointer"
+                >
+                  <UserCircle className="h-4 w-4 mr-2" />
+                  {t('profile.title')}
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={async () => {
                     await signOut({ redirect: false })

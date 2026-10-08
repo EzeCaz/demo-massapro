@@ -143,56 +143,108 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
   const LAVENDER = hexNoHash(BRAND.softLavender)
   const WHITE = hexNoHash(BRAND.pureWhite)
   const GREY = '666666'
+  // Extra shades for the gradient effect (Orchid Purple blended with Lavender).
+  // We simulate a gradient by stacking rows of different shades in the cover banner.
+  const ORCHID_DEEP = '6B21A8'   // #6B21A8 — deeper purple for top of gradient
+  const ORCHID_MID = '7E22CE'    // #7E22CE — mid
+  const LAVENDER_LIGHT = 'FAF5FF' // #FAF5FF — bottom of gradient (very light)
 
   // =========================================================================
   // SECTION 1 — Cover Page
+  //
+  // The original Connex template has a full-bleed gradient banner. Word doesn't
+  // support true gradients, so we simulate one by stacking three full-width
+  // single-cell tables with progressively lighter Orchid Purple shades:
+  //   row 1 (deepest) → row 2 (mid) → row 3 (lavender) → row 4 (white)
+  // The MassaPro logo sits centered in the gradient, "Statement of Work" in
+  // white below it.
   // =========================================================================
-  const coverImage: (Paragraph | Table) = logoBuffer
-    ? new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 2400, after: 240 },
-        children: [
-          new ImageRun({
-            data: logoBuffer,
-            transformation: { width: 180, height: 180 },
-            type: 'png',
-          } as any),
-        ],
-      })
-    : new Paragraph({ spacing: { before: 2400, after: 240 }, children: [] })
 
-  const coverChildren: (Paragraph | Table)[] = [
-    coverImage,
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 0 },
-      children: [
-        new TextRun({ text: 'MassaPro', bold: true, size: 56, color: ORCHID, font: 'Calibri' }),
-      ],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 120, after: 240 },
-      children: [
-        new TextRun({ text: 'Statement of Work', bold: true, size: 36, color: JET, font: 'Calibri' }),
-      ],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 480 },
-      children: [
-        new TextRun({
-          text: brandClean(`Implementation of your MassaPro platform`),
-          italics: true,
-          size: 24,
-          color: GREY,
-          font: 'Calibri',
-        }),
-      ],
-    }),
+  // Helper — a single full-width cell with a colored background. Used to
+  // simulate the gradient banner.
+  const gradientRow = (fill: string, height: number, children: (Paragraph | Table)[] = []) =>
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: noBorderAll(),
+      rows: [
+        new TableRow({
+          height: { value: height, rule: 'atLeast' as any },
+          children: [
+            new TableCell({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              shading: { type: ShadingType.CLEAR, color: 'auto', fill },
+              margins: { top: 0, bottom: 0, left: 0, right: 0 },
+              borders: noBorderAll() as any,
+              children,
+            }),
+          ],
+        }),
+      ],
+    })
+
+  const coverChildren: (Paragraph | Table)[] = [
+    // Gradient banner — top of cover (deepest Orchid)
+    gradientRow(ORCHID_DEEP, 1600, [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 600, after: 0 },
+        children: logoBuffer
+          ? [new ImageRun({ data: logoBuffer, transformation: { width: 180, height: 180 }, type: 'png' } as any)]
+          : [],
+      }),
+    ]),
+    // Mid Orchid band
+    gradientRow(ORCHID_MID, 200, []),
+    // Light Orchid (orchid)
+    gradientRow(ORCHID, 200, [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 0 },
+        children: [
+          new TextRun({ text: 'MassaPro', bold: true, size: 56, color: WHITE, font: 'Calibri' }),
+        ],
+      }),
+    ]),
+    // Lavender band
+    gradientRow(LAVENDER, 200, [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 0 },
+        children: [
+          new TextRun({ text: 'Statement of Work', bold: true, size: 36, color: JET, font: 'Calibri' }),
+        ],
+      }),
+    ]),
+    // Very light lavender band
+    gradientRow(LAVENDER_LIGHT, 200, [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 0 },
+        children: [
+          new TextRun({
+            text: brandClean(`Implementation of your MassaPro platform`),
+            italics: true,
+            size: 24,
+            color: JET,
+            font: 'Calibri',
+          }),
+        ],
+      }),
+    ]),
+    // Spacer
+    new Paragraph({ spacing: { before: 240, after: 240 }, children: [] }),
+    // Cover info table — Soft Lavender label column, white value column,
+    // purple outer border.
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 12, color: ORCHID },
+        bottom: { style: BorderStyle.SINGLE, size: 12, color: ORCHID },
+        left: { style: BorderStyle.SINGLE, size: 12, color: ORCHID },
+        right: { style: BorderStyle.SINGLE, size: 12, color: ORCHID },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: LAVENDER },
+        insideVertical: { style: BorderStyle.SINGLE, size: 4, color: LAVENDER },
+      },
       alignment: AlignmentType.CENTER,
       rows: [
         coverInfoRow('Client', cover.clientName || '<client name>'),
@@ -371,39 +423,44 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     }),
   ]
   let taskCounter = 0
+  let stripeCounter = 0
   allServices.forEach((svc) => {
     svc.tasks.forEach((task) => {
       taskCounter += 1
+      stripeCounter += 1
       const state = taskState[task.id] || {}
       const status = state.status ? STATUS_LABELS[state.status] : STATUS_LABELS.pending
+      const stripe = stripeCounter % 2 === 1
       taskRows.push(
         new TableRow({
           children: [
-            taskBodyCell(String(taskCounter), true),
-            taskBodyCell(brandClean(task.title), false),
-            taskBodyCell(brandClean(svc.name), false),
-            taskBodyCell(status, false),
-            taskBodyCell(state.owner || '', false),
-            taskBodyCell(state.dueDate || '', false),
-            taskBodyCell(state.notes || '', false),
+            taskBodyCell(String(taskCounter), true, stripe),
+            taskBodyCell(brandClean(task.title), false, stripe),
+            taskBodyCell(brandClean(svc.name), false, stripe),
+            taskBodyCell(status, false, stripe),
+            taskBodyCell(state.owner || '', false, stripe),
+            taskBodyCell(state.dueDate || '', false, stripe),
+            taskBodyCell(state.notes || '', false, stripe),
           ],
         })
       )
       if (task.subTasks && task.subTasks.length) {
         task.subTasks.forEach((sub) => {
           taskCounter += 1
+          stripeCounter += 1
           const subState = taskState[sub.id] || {}
           const subStatus = subState.status ? STATUS_LABELS[subState.status] : STATUS_LABELS.pending
+          const subStripe = stripeCounter % 2 === 1
           taskRows.push(
             new TableRow({
               children: [
-                taskBodyCell(`${taskCounter}`, true),
-                taskBodyCell(`↳ ${brandClean(sub.title)}`, false),
-                taskBodyCell(brandClean(svc.name), false),
-                taskBodyCell(subStatus, false),
-                taskBodyCell(subState.owner || '', false),
-                taskBodyCell(subState.dueDate || '', false),
-                taskBodyCell(subState.notes || '', false),
+                taskBodyCell(`${taskCounter}`, true, subStripe),
+                taskBodyCell(`↳ ${brandClean(sub.title)}`, false, subStripe),
+                taskBodyCell(brandClean(svc.name), false, subStripe),
+                taskBodyCell(subStatus, false, subStripe),
+                taskBodyCell(subState.owner || '', false, subStripe),
+                taskBodyCell(subState.dueDate || '', false, subStripe),
+                taskBodyCell(subState.notes || '', false, subStripe),
               ],
             })
           )
@@ -494,12 +551,12 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
             taskHeaderCell('Status'),
           ],
         }),
-        ...milestoneRows.map((m) =>
+        ...milestoneRows.map((m, i) =>
           new TableRow({
             children: [
-              taskBodyCell(brandClean(m.task), false),
-              taskBodyCell(m.targetDate, false),
-              taskBodyCell(m.status, false),
+              taskBodyCell(brandClean(m.task), false, i % 2 === 1),
+              taskBodyCell(m.targetDate, false, i % 2 === 1),
+              taskBodyCell(m.status, false, i % 2 === 1),
             ],
           })
         ),
@@ -533,18 +590,18 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
         }),
         new TableRow({
           children: [
-            specBodyCell('MassaPro Authorized Signatory', true),
-            specBodyCell('', false),
-            specBodyCell('', false),
-            specBodyCell('', false),
+            specBodyCell('MassaPro Authorized Signatory', true, true),
+            specBodyCell('', false, true),
+            specBodyCell('', false, true),
+            specBodyCell('', false, true),
           ],
         }),
         new TableRow({
           children: [
-            specBodyCell(`${cover.clientName || 'Client'} Authorized Signatory`, true),
-            specBodyCell('', false),
-            specBodyCell('', false),
-            specBodyCell('', false),
+            specBodyCell(`${cover.clientName || 'Client'} Authorized Signatory`, true, false),
+            specBodyCell('', false, false),
+            specBodyCell('', false, false),
+            specBodyCell('', false, false),
           ],
         }),
       ],
@@ -715,7 +772,8 @@ function bulletParagraph(text: string, level: number = 0): Paragraph {
   })
 }
 
-// Cover-info table row (label / value)
+// Cover-info table row (label / value). Lavender label column, white value
+// column, both with purple bold text.
 function coverInfoRow(label: string, value: string): TableRow {
   return new TableRow({
     children: [
@@ -742,21 +800,26 @@ function coverInfoRow(label: string, value: string): TableRow {
   })
 }
 
+// Spec table — Orchid Purple header row (white text), alternating white /
+// Soft Lavender body rows. Pass `stripe=true` on odd rows.
 function specHeaderCell(text: string): TableCell {
   return new TableCell({
-    margins: { top: 80, bottom: 80, left: 100, right: 100 },
-    shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F3E8FF' },
+    margins: { top: 100, bottom: 100, left: 120, right: 120 },
+    shading: { type: ShadingType.CLEAR, color: 'auto', fill: '9333EA' },
     children: [
       new Paragraph({
-        children: [new TextRun({ text, bold: true, size: 22, color: '030712', font: 'Calibri' })],
+        children: [new TextRun({ text, bold: true, size: 22, color: 'FFFFFF', font: 'Calibri' })],
       }),
     ],
   })
 }
 
-function specBodyCell(text: string, bold: boolean): TableCell {
+function specBodyCell(text: string, bold: boolean, stripe: boolean = false): TableCell {
   return new TableCell({
-    margins: { top: 80, bottom: 80, left: 100, right: 100 },
+    margins: { top: 80, bottom: 80, left: 120, right: 120 },
+    shading: stripe
+      ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F3E8FF' }
+      : undefined,
     children: [
       new Paragraph({
         children: [new TextRun({ text, bold, size: 22, color: '030712', font: 'Calibri' })],
@@ -765,9 +828,10 @@ function specBodyCell(text: string, bold: boolean): TableCell {
   })
 }
 
+// Task table — same Orchid Purple header, alternating body rows.
 function taskHeaderCell(text: string): TableCell {
   return new TableCell({
-    margins: { top: 60, bottom: 60, left: 80, right: 80 },
+    margins: { top: 80, bottom: 80, left: 100, right: 100 },
     shading: { type: ShadingType.CLEAR, color: 'auto', fill: '9333EA' },
     children: [
       new Paragraph({
@@ -777,9 +841,12 @@ function taskHeaderCell(text: string): TableCell {
   })
 }
 
-function taskBodyCell(text: string, bold: boolean): TableCell {
+function taskBodyCell(text: string, bold: boolean, stripe: boolean = false): TableCell {
   return new TableCell({
     margins: { top: 60, bottom: 60, left: 80, right: 80 },
+    shading: stripe
+      ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F3E8FF' }
+      : undefined,
     children: [
       new Paragraph({
         children: [new TextRun({ text, bold, size: 20, color: '030712', font: 'Calibri' })],
@@ -788,17 +855,20 @@ function taskBodyCell(text: string, bold: boolean): TableCell {
   })
 }
 
+// Brand-colored table borders — purple outer, lavender inner.
 function tableBorders() {
-  const edge = { style: BorderStyle.SINGLE, size: 4, color: 'E5E7EB' }
+  const outer = { style: BorderStyle.SINGLE, size: 12, color: '9333EA' }
+  const inner = { style: BorderStyle.SINGLE, size: 4, color: 'F3E8FF' }
   return {
-    top: edge,
-    bottom: edge,
-    left: edge,
-    right: edge,
-    insideHorizontal: edge,
-    insideVertical: edge,
+    top: outer,
+    bottom: outer,
+    left: outer,
+    right: outer,
+    insideHorizontal: inner,
+    insideVertical: inner,
   }
 }
+
 
 function noBorderAll() {
   const none = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }

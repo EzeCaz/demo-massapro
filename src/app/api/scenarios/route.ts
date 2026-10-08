@@ -20,12 +20,39 @@ export async function GET(req: NextRequest) {
         include: { client: { select: { id: true, name: true, email: true, company: true } }, kpis: true, _count: { select: { attachments: true, comments: true, collaborations: true, adminNotes: true } } },
       })
     } else {
-      // Get user's own scenarios + collaborated scenarios
+      // Per Task 22 — visibility is now Demo-driven:
+      //   - Scenarios where the user is the client (legacy: clientId === user.id)
+      //   - PLUS Scenarios whose Demo the user can access (owner OR has a
+      //     DemoAccess row with view/comment/edit)
+      //   - PLUS legacy collaborations (Scenario.collaborations rows).
+      // Any Scenario whose Demo the user can't see is hidden.
+
+      // 1. Find demos the user can see (owned or has access)
+      const visibleDemoIds = await db.demo.findMany({
+        where: {
+          OR: [
+            { ownerId: userId },
+            { access: { some: { userId } } },
+          ],
+        },
+        select: { id: true },
+      })
+      const demoIds = visibleDemoIds.map((d) => d.id)
+
+      // 2. Find scenarios: own clientId + scenarios in visible demos + collaborations
       const ownScenarios = await db.scenario.findMany({
         where: { clientId: userId },
         orderBy: { order: 'asc' },
         include: { client: { select: { id: true, name: true, email: true, company: true } }, kpis: true, _count: { select: { attachments: true, comments: true, collaborations: true, adminNotes: true } } },
       })
+
+      const demoScenarios = demoIds.length > 0
+        ? await db.scenario.findMany({
+            where: { demoId: { in: demoIds }, clientId: { not: userId } },
+            orderBy: { order: 'asc' },
+            include: { client: { select: { id: true, name: true, email: true, company: true } }, kpis: true, _count: { select: { attachments: true, comments: true, collaborations: true, adminNotes: true } } },
+          })
+        : []
 
       const collaborations = await db.collaboration.findMany({
         where: { collaboratorId: userId },
@@ -35,9 +62,16 @@ export async function GET(req: NextRequest) {
           },
         },
       })
+      const collabScenarios = collaborations.map((c) => c.scenario)
 
-      const collabScenarios = collaborations.map(c => c.scenario)
-      scenarios = [...ownScenarios, ...collabScenarios]
+      // Merge + dedupe by id
+      const seen = new Set<string>()
+      const merged = [...ownScenarios, ...demoScenarios, ...collabScenarios].filter((s) => {
+        if (seen.has(s.id)) return false
+        seen.add(s.id)
+        return true
+      })
+      scenarios = merged
     }
 
     return NextResponse.json(scenarios)
@@ -90,11 +124,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(scenarios, { status: 201 })
     }
 
-    // Single scenario creation
-    const { name, order, links } = body
+    // Single scenario creation — supports optional demoId (Task 22 hierarchy).
+    const { name, order, links, demoId } = body
     const scenario = await db.scenario.create({
       data: {
         clientId: userId,
+        demoId: typeof demoId === 'string' && demoId.trim() ? demoId.trim() : null,
         name: name || 'New Scenario',
         order: order ?? 0,
         links: links && Array.isArray(links) ? {

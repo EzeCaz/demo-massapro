@@ -84,12 +84,15 @@ const DEFAULT_STATE: SOWState = {
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export default function SOWBuilder() {
+export default function SOWBuilder({ snapshotId }: { snapshotId?: string } = {}) {
   const { t, language } = useLanguage()
   const isRTL = language === 'he'
 
   const [state, setState] = useState<SOWState>(DEFAULT_STATE)
   const [hydrated, setHydrated] = useState(false)
+  const [snapshotName, setSnapshotName] = useState<string>('')
+  const [snapshotStatus, setSnapshotStatus] = useState<string>('draft')
+  const [savingToPlatform, setSavingToPlatform] = useState(false)
   const [activeServiceFilter, setActiveServiceFilter] = useState<string>('all')
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>('all')
   const [showAddCustomService, setShowAddCustomService] = useState(false)
@@ -98,26 +101,69 @@ export default function SOWBuilder() {
   const [customTaskDraft, setCustomTaskDraft] = useState({ title: '', description: '', serviceId: '' })
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({})
 
-  // ---- Hydration from localStorage (client only) -------------------------
+  // ---- Hydration from localStorage (client only) OR from a SOWSnapshot on
+  //      the platform (when snapshotId is passed via the ?snapshot= URL param).
+  //      Snapshot takes priority — it's the canonical saved version. -------
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) {
-        const parsed = JSON.parse(raw) as SOWState
-        // Merge with defaults to handle schema additions gracefully
-        setState({
-          cover: { ...DEFAULT_STATE.cover, ...parsed.cover },
-          selectedServiceIds: parsed.selectedServiceIds ?? DEFAULT_STATE.selectedServiceIds,
-          customServices: parsed.customServices ?? [],
-          taskState: parsed.taskState ?? {},
-          specValues: parsed.specValues ?? {},
-        })
+    let cancelled = false
+    async function loadSnapshot() {
+      if (!snapshotId) return null
+      try {
+        const res = await fetch(`/api/sow-snapshots/${snapshotId}`)
+        if (!res.ok) return null
+        const data = await res.json()
+        return data.snapshot
+      } catch {
+        return null
       }
-    } catch {
-      // ignore — start with defaults
     }
-    setHydrated(true)
-  }, [])
+    async function hydrate() {
+      const snap = await loadSnapshot()
+      if (cancelled) return
+      if (snap && snap.payload) {
+        const p = snap.payload as any
+        setState({
+          cover: { ...DEFAULT_STATE.cover, ...(p.cover || {}) },
+          selectedServiceIds: p.selectedServiceIds ?? DEFAULT_STATE.selectedServiceIds,
+          customServices: p.customServices ?? [],
+          taskState: p.taskState ?? {},
+          specValues: p.specValues ?? {},
+        })
+        setSnapshotName(snap.name || '')
+        setSnapshotStatus(snap.status || 'draft')
+        // Also persist to localStorage so the SOWSpecsSubTab / SOWTasksSubTab
+        // (which read from localStorage) see the same state when the user
+        // switches to the platform's Setup tab.
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            cover: { ...DEFAULT_STATE.cover, ...(p.cover || {}) },
+            selectedServiceIds: p.selectedServiceIds ?? DEFAULT_STATE.selectedServiceIds,
+            customServices: p.customServices ?? [],
+            taskState: p.taskState ?? {},
+            specValues: p.specValues ?? {},
+          }))
+        } catch {}
+      } else {
+        // No snapshot — fall back to localStorage (legacy behavior)
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY)
+          if (raw) {
+            const parsed = JSON.parse(raw) as SOWState
+            setState({
+              cover: { ...DEFAULT_STATE.cover, ...parsed.cover },
+              selectedServiceIds: parsed.selectedServiceIds ?? DEFAULT_STATE.selectedServiceIds,
+              customServices: parsed.customServices ?? [],
+              taskState: parsed.taskState ?? {},
+              specValues: parsed.specValues ?? {},
+            })
+          }
+        } catch {}
+      }
+      setHydrated(true)
+    }
+    hydrate()
+    return () => { cancelled = true }
+  }, [snapshotId])
 
   // ---- Auto-save to localStorage (debounced via micro-batching) -----------
   useEffect(() => {
@@ -420,6 +466,68 @@ export default function SOWBuilder() {
     }
   }, [state, customTasksRegistry, milestones])
 
+  // ---- Save to platform (PUT /api/sow-snapshots/[id]) -------------------
+  // Auto-saves are debounced 2.5s after the last change while editing a
+  // snapshot. A manual "Save" button is also rendered in the banner when
+  // snapshotId is set.
+  const saveToPlatform = useCallback(async () => {
+    if (!snapshotId) return
+    setSavingToPlatform(true)
+    try {
+      const res = await fetch(`/api/sow-snapshots/${snapshotId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: snapshotName || 'Untitled SOW',
+          status: snapshotStatus,
+          payload: {
+            cover: state.cover,
+            selectedServiceIds: state.selectedServiceIds,
+            customServices: state.customServices,
+            taskState: state.taskState,
+            specValues: state.specValues,
+            customTasksByBuiltinService: Object.fromEntries(
+              Object.entries(customTasksRegistry).filter(
+                ([sid]) => state.selectedServiceIds.includes(sid) && !state.customServices.some((cs) => cs.id === sid)
+              )
+            ),
+            milestones,
+          },
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Failed' }))
+        throw new Error(err.error || 'Failed to save')
+      }
+      toast.success('Saved to platform')
+    } catch (err: any) {
+      toast.error(err.message || 'Save failed')
+    } finally {
+      setSavingToPlatform(false)
+    }
+  }, [snapshotId, state, snapshotName, snapshotStatus, customTasksRegistry, milestones])
+
+  // Debounced auto-save (2.5s after the last change) — only when editing a snapshot
+  useEffect(() => {
+    if (!hydrated || !snapshotId) return
+    const t = setTimeout(() => {
+      saveToPlatform()
+    }, 2500)
+    return () => clearTimeout(t)
+  }, [hydrated, snapshotId, state, snapshotName, snapshotStatus, customTasksRegistry, milestones, saveToPlatform])
+
+  // ---- PDF export (uses the platform PDF route) ------------------------
+  const handleExportPDF = useCallback(() => {
+    if (!snapshotId) {
+      toast.info('PDF export requires a saved SOW. Click "Save to platform" first.')
+      return
+    }
+    // Save first (so the PDF reflects the latest state), then open the PDF route
+    saveToPlatform().then(() => {
+      window.open(`/api/sow-snapshots/${snapshotId}/pdf`, '_blank')
+    })
+  }, [snapshotId, saveToPlatform])
+
   // ---- Toggle task expansion ------------------------------------------
   const toggleExpand = useCallback((taskId: string) => {
     setExpandedTasks((prev) => ({ ...prev, [taskId]: !prev[taskId] }))
@@ -481,9 +589,35 @@ export default function SOWBuilder() {
             >
               {t('sow.title')}
             </h1>
-            <p className="text-sm mt-1" style={{ color: JET }}>{t('sow.subtitle')}</p>
+            <p className="text-sm mt-1" style={{ color: JET }}>
+              {snapshotId ? (
+                <>
+                  {snapshotName || 'Untitled SOW'}{' '}
+                  <Badge variant="outline" className="ml-2 text-xs" style={{ borderColor: ORCHID, color: ORCHID, background: LAVENDER }}>
+                    {snapshotStatus}
+                  </Badge>
+                  <span className="text-xs ml-2" style={{ color: JET, opacity: 0.6 }}>
+                    · auto-saved to platform
+                  </span>
+                </>
+              ) : (
+                t('sow.subtitle')
+              )}
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {snapshotId && (
+              <Button
+                onClick={saveToPlatform}
+                disabled={savingToPlatform}
+                variant="outline"
+                className="border-2"
+                style={{ borderColor: ORCHID, color: ORCHID }}
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {savingToPlatform ? 'Saving…' : 'Save'}
+              </Button>
+            )}
             <Button
               onClick={handleExportWord}
               className="text-white shadow-md"
@@ -491,6 +625,15 @@ export default function SOWBuilder() {
             >
               <Download className="h-4 w-4 mr-2" />
               {t('sow.export.word')}
+            </Button>
+            <Button
+              onClick={handleExportPDF}
+              variant="outline"
+              className="border-2"
+              style={{ borderColor: ORCHID, color: ORCHID }}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              {t('sow.export.pdf') || 'PDF'}
             </Button>
             <Button
               variant="outline"
