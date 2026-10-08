@@ -2,10 +2,10 @@
 
 import { useLanguage } from '@/hooks/useLanguage'
 import { signOut, useSession } from 'next-auth/react'
-import { Globe, LogOut, Shield, LayoutDashboard, Crown, Plug, FileText, UserCircle } from 'lucide-react'
+import { Globe, LogOut, Shield, Crown, Plug, FileText, UserCircle, LifeBuoy, BarChart3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,12 +14,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Suspense } from 'react'
 
-export default function MassaProHeader() {
+function MassaProHeaderInner() {
   const { language, setLanguage, t } = useLanguage()
   const { data: session } = useSession()
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const userRole = (session?.user as any)?.role
   const userName = session?.user?.name || session?.user?.email || ''
@@ -42,43 +44,61 @@ export default function MassaProHeader() {
 
           {/* Right: Nav + Language + User */}
           <div className="flex items-center gap-2 sm:gap-4">
-            {/* Platform — the main MassaPro Demo Platform. Visible to all
-                authenticated users (admin, super_admin, user, demo). Replaces
-                the old /dashboard + /admin toggle (Task 21). */}
-            <Link href="/platform">
+            {/* 5 main tabs — directly in the header (Task 25 restructure).
+                Each links to /platform?tab=<name>. Global Admin is visible
+                only to admin + super_admin. */}
+            <Link href="/platform?tab=demo">
               <Button
-                variant={pathname?.startsWith('/platform') ? 'default' : 'ghost'}
+                variant={pathname?.startsWith('/platform') && searchParams?.get('tab') === 'demo' ? 'default' : 'ghost'}
                 size="sm"
-                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
-              >
-                <LayoutDashboard className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">Platform</span>
-              </Button>
-            </Link>
-
-            {/* Integration Setup nav link — visible to all authenticated users */}
-            <Link href="/integration-setup">
-              <Button
-                variant={pathname?.startsWith('/integration-setup') ? 'default' : 'ghost'}
-                size="sm"
-                className={`text-xs sm:text-sm ${pathname?.startsWith('/integration-setup') ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
-              >
-                <Plug className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">{t('integration.title')}</span>
-              </Button>
-            </Link>
-
-            {/* SOW Builder nav link — visible to all authenticated users */}
-            <Link href="/sow">
-              <Button
-                variant={pathname?.startsWith('/sow') ? 'default' : 'ghost'}
-                size="sm"
-                className={`text-xs sm:text-sm ${pathname?.startsWith('/sow') ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && searchParams?.get('tab') === 'demo' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
               >
                 <FileText className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">{t('sow.title')}</span>
+                <span className="hidden sm:inline">{t('platform.tab.demo')}</span>
               </Button>
             </Link>
+            <Link href="/platform?tab=integrations">
+              <Button
+                variant={pathname?.startsWith('/platform') && searchParams?.get('tab') === 'integrations' ? 'default' : 'ghost'}
+                size="sm"
+                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && searchParams?.get('tab') === 'integrations' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+              >
+                <Plug className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">{t('platform.tab.integrations')}</span>
+              </Button>
+            </Link>
+            <Link href="/platform?tab=support">
+              <Button
+                variant={pathname?.startsWith('/platform') && searchParams?.get('tab') === 'support' ? 'default' : 'ghost'}
+                size="sm"
+                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && searchParams?.get('tab') === 'support' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+              >
+                <LifeBuoy className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">{t('platform.tab.support')}</span>
+              </Button>
+            </Link>
+            <Link href="/platform?tab=reports">
+              <Button
+                variant={pathname?.startsWith('/platform') && searchParams?.get('tab') === 'reports' ? 'default' : 'ghost'}
+                size="sm"
+                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && searchParams?.get('tab') === 'reports' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+              >
+                <BarChart3 className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">{t('platform.tab.reports')}</span>
+              </Button>
+            </Link>
+            {(userRole === 'admin' || userRole === 'super_admin') && (
+              <Link href="/platform?tab=admin">
+                <Button
+                  variant={pathname?.startsWith('/platform') && searchParams?.get('tab') === 'admin' ? 'default' : 'ghost'}
+                  size="sm"
+                  className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && searchParams?.get('tab') === 'admin' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+                >
+                  <Shield className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">{t('platform.tab.admin')}</span>
+                </Button>
+              </Link>
+            )}
 
             {/* Language Switcher */}
             <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1">
@@ -158,5 +178,17 @@ export default function MassaProHeader() {
         </div>
       </div>
     </header>
+  )
+}
+
+// Default export wraps the inner component in <Suspense> because
+// useSearchParams() requires it (otherwise Next.js throws a
+// "useSearchParams() should be wrapped in a suspense boundary" error
+// during static generation).
+export default function MassaProHeader() {
+  return (
+    <Suspense fallback={null}>
+      <MassaProHeaderInner />
+    </Suspense>
   )
 }
