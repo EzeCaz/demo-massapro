@@ -25,13 +25,14 @@ function MassaProHeaderInner() {
 
   const userRole = (session?.user as any)?.role
   const userName = session?.user?.name || session?.user?.email || ''
+  const activeTab = searchParams?.get('tab') || 'demo'
 
   return (
     <header className="mp-navy sticky top-0 z-50 shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Left: Logo + Brand */}
-          <Link href="/platform" className="flex items-center gap-3">
+          {/* Left: Logo + Brand — links to the Demo tab (platform home) */}
+          <Link href="/platform?tab=demo" className="flex items-center gap-3">
             <img
               src="/massapro-logo.png"
               alt="MassaPro Logo"
@@ -49,9 +50,9 @@ function MassaProHeaderInner() {
                 only to admin + super_admin. */}
             <Link href="/platform?tab=demo">
               <Button
-                variant={pathname?.startsWith('/platform') && searchParams?.get('tab') === 'demo' ? 'default' : 'ghost'}
+                variant={pathname?.startsWith('/platform') && activeTab === 'demo' ? 'default' : 'ghost'}
                 size="sm"
-                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && searchParams?.get('tab') === 'demo' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && activeTab === 'demo' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
               >
                 <FileText className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">{t('platform.tab.demo')}</span>
@@ -59,9 +60,9 @@ function MassaProHeaderInner() {
             </Link>
             <Link href="/platform?tab=integrations">
               <Button
-                variant={pathname?.startsWith('/platform') && searchParams?.get('tab') === 'integrations' ? 'default' : 'ghost'}
+                variant={pathname?.startsWith('/platform') && activeTab === 'integrations' ? 'default' : 'ghost'}
                 size="sm"
-                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && searchParams?.get('tab') === 'integrations' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && activeTab === 'integrations' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
               >
                 <Plug className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">{t('platform.tab.integrations')}</span>
@@ -69,9 +70,9 @@ function MassaProHeaderInner() {
             </Link>
             <Link href="/platform?tab=support">
               <Button
-                variant={pathname?.startsWith('/platform') && searchParams?.get('tab') === 'support' ? 'default' : 'ghost'}
+                variant={pathname?.startsWith('/platform') && activeTab === 'support' ? 'default' : 'ghost'}
                 size="sm"
-                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && searchParams?.get('tab') === 'support' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && activeTab === 'support' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
               >
                 <LifeBuoy className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">{t('platform.tab.support')}</span>
@@ -79,9 +80,9 @@ function MassaProHeaderInner() {
             </Link>
             <Link href="/platform?tab=reports">
               <Button
-                variant={pathname?.startsWith('/platform') && searchParams?.get('tab') === 'reports' ? 'default' : 'ghost'}
+                variant={pathname?.startsWith('/platform') && activeTab === 'reports' ? 'default' : 'ghost'}
                 size="sm"
-                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && searchParams?.get('tab') === 'reports' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && activeTab === 'reports' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
               >
                 <BarChart3 className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">{t('platform.tab.reports')}</span>
@@ -90,9 +91,9 @@ function MassaProHeaderInner() {
             {(userRole === 'admin' || userRole === 'super_admin') && (
               <Link href="/platform?tab=admin">
                 <Button
-                  variant={pathname?.startsWith('/platform') && searchParams?.get('tab') === 'admin' ? 'default' : 'ghost'}
+                  variant={pathname?.startsWith('/platform') && activeTab === 'admin' ? 'default' : 'ghost'}
                   size="sm"
-                  className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && searchParams?.get('tab') === 'admin' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+                  className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') && activeTab === 'admin' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
                 >
                   <Shield className="h-4 w-4 mr-1" />
                   <span className="hidden sm:inline">{t('platform.tab.admin')}</span>

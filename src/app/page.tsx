@@ -29,8 +29,8 @@ export default async function HomePage() {
       const setupId = (session.user as any).shareSetupId || ''
       redirect(`/s/${setupId || ''}`)
     }
-    // All other users go to the platform
-    redirect('/platform')
+    // All other users go to the platform (Demo tab by default)
+    redirect('/platform?tab=demo')
   }
 
   redirect('/login')

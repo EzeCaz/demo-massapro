@@ -20,7 +20,7 @@ export default function DashboardPage() {
     if (status === 'unauthenticated') {
       window.location.href = '/login'
     } else {
-      window.location.href = '/platform'
+      window.location.href = '/platform?tab=demo'
     }
   }, [status])
 
