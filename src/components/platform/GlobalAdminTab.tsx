@@ -44,19 +44,19 @@ export default function GlobalAdminTab() {
         <TabsList className="mb-4">
           <TabsTrigger value="users" className="flex items-center gap-1.5 text-xs sm:text-sm">
             <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">{t('admin.tab.users')}</span>
+            <span className="hidden sm:inline">{t('platform.tab.admin.users')}</span>
           </TabsTrigger>
           <TabsTrigger value="sow" className="flex items-center gap-1.5 text-xs sm:text-sm">
             <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">{t('admin.tab.sow')}</span>
+            <span className="hidden sm:inline">{t('platform.tab.admin.sowEdit')}</span>
           </TabsTrigger>
           <TabsTrigger value="integration" className="flex items-center gap-1.5 text-xs sm:text-sm">
             <Plug className="h-4 w-4" />
-            <span className="hidden sm:inline">{t('admin.tab.integration')}</span>
+            <span className="hidden sm:inline">{t('platform.tab.admin.integrationEdit')}</span>
           </TabsTrigger>
           <TabsTrigger value="reports" className="flex items-center gap-1.5 text-xs sm:text-sm">
             <BarChart3 className="h-4 w-4" />
-            <span className="hidden sm:inline">{t('admin.tab.reports')}</span>
+            <span className="hidden sm:inline">{t('platform.tab.admin.reports')}</span>
           </TabsTrigger>
         </TabsList>
 

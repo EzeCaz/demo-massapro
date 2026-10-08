@@ -52,7 +52,7 @@ export default function MassaProHeader() {
                 className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
               >
                 <LayoutDashboard className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">{t('platform.title').replace('MassaPro ', '')}</span>
+                <span className="hidden sm:inline">Platform</span>
               </Button>
             </Link>
 

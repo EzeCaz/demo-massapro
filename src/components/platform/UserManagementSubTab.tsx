@@ -197,13 +197,13 @@ export default function UserManagementSubTab({ isSuperAdmin }: { isSuperAdmin: b
       <Tabs defaultValue="users">
         <TabsList>
           <TabsTrigger value="users" className="text-xs">
-            <Users className="h-4 w-4 mr-1.5" /> {t('admin.users.title')}
+            <Users className="h-4 w-4 mr-1.5" /> {t('platform.tab.admin.users.management')}
           </TabsTrigger>
           <TabsTrigger value="companies" className="text-xs">
-            <Building2 className="h-4 w-4 mr-1.5" /> {t('admin.companies.title')}
+            <Building2 className="h-4 w-4 mr-1.5" /> {t('platform.tab.admin.users.companies')}
           </TabsTrigger>
           <TabsTrigger value="teams" className="text-xs">
-            <UserCog className="h-4 w-4 mr-1.5" /> {t('admin.teams.title')}
+            <UserCog className="h-4 w-4 mr-1.5" /> {t('platform.tab.admin.users.teams')}
           </TabsTrigger>
         </TabsList>
 

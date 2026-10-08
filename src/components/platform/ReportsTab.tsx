@@ -80,10 +80,10 @@ export default function ReportsTab() {
 
       <Tabs value={sub} onValueChange={setSub}>
         <TabsList>
-          <TabsTrigger value="summary" className="text-xs sm:text-sm">{t('reporting.summary')}</TabsTrigger>
-          <TabsTrigger value="demos" className="text-xs sm:text-sm">{t('reporting.demosScenarios')}</TabsTrigger>
-          <TabsTrigger value="integrations" className="text-xs sm:text-sm">{t('reporting.integrationsSow')}</TabsTrigger>
-          <TabsTrigger value="support" className="text-xs sm:text-sm">{t('reporting.support')}</TabsTrigger>
+          <TabsTrigger value="summary" className="text-xs sm:text-sm">{t('platform.tab.reports.summary')}</TabsTrigger>
+          <TabsTrigger value="demos" className="text-xs sm:text-sm">{t('platform.tab.reports.demos')}</TabsTrigger>
+          <TabsTrigger value="integrations" className="text-xs sm:text-sm">{t('platform.tab.reports.integrationsSow')}</TabsTrigger>
+          <TabsTrigger value="support" className="text-xs sm:text-sm">{t('platform.tab.reports.support')}</TabsTrigger>
         </TabsList>
 
         {/* === Summary === */}
