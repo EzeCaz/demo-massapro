@@ -2,7 +2,7 @@
 
 import { useLanguage } from '@/hooks/useLanguage'
 import { signOut, useSession } from 'next-auth/react'
-import { Globe, LogOut, Shield, LayoutDashboard, Crown, Plug, BarChart3, FileText } from 'lucide-react'
+import { Globe, LogOut, Shield, LayoutDashboard, Crown, Plug, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -29,7 +29,7 @@ export default function MassaProHeader() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left: Logo + Brand */}
-          <Link href={(userRole === 'admin' || userRole === 'super_admin') ? '/admin' : '/dashboard'} className="flex items-center gap-3">
+          <Link href="/platform" className="flex items-center gap-3">
             <img
               src="/massapro-logo.png"
               alt="MassaPro Logo"
@@ -42,43 +42,19 @@ export default function MassaProHeader() {
 
           {/* Right: Nav + Language + User */}
           <div className="flex items-center gap-2 sm:gap-4">
-            {/* View Toggle — visible to all authenticated users.
-                Per Task 18: the link goes to /admin for everyone, but the
-                LABEL depends on role:
-                  - super_admin: "Admin Panel" (Shield icon) — they keep
-                    full management powers inside the page.
-                  - admin + user: "Reports" (BarChart3 icon) — they see
-                    the same dashboard view but with mutation controls
-                    hidden (the AdminPanel component enforces this).
-                The "Admin Panel" name is reserved for super_admin only. */}
-            <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1">
-              <Link href="/admin">
-                <Button
-                  variant={pathname === '/admin' ? 'default' : 'ghost'}
-                  size="sm"
-                  className={`text-xs sm:text-sm ${pathname === '/admin' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
-                >
-                  {userRole === 'super_admin' ? (
-                    <Shield className="h-4 w-4 mr-1" />
-                  ) : (
-                    <BarChart3 className="h-4 w-4 mr-1" />
-                  )}
-                  <span className="hidden sm:inline">
-                    {userRole === 'super_admin' ? t('header.admin') : t('header.reports')}
-                  </span>
-                </Button>
-              </Link>
-              <Link href="/dashboard">
-                <Button
-                  variant={pathname === '/dashboard' ? 'default' : 'ghost'}
-                  size="sm"
-                  className={`text-xs sm:text-sm ${pathname === '/dashboard' ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
-                >
-                  <LayoutDashboard className="h-4 w-4 mr-1" />
-                  <span className="hidden sm:inline">{t('header.dashboard')}</span>
-                </Button>
-              </Link>
-            </div>
+            {/* Platform — the main MassaPro Demo Platform. Visible to all
+                authenticated users (admin, super_admin, user, demo). Replaces
+                the old /dashboard + /admin toggle (Task 21). */}
+            <Link href="/platform">
+              <Button
+                variant={pathname?.startsWith('/platform') ? 'default' : 'ghost'}
+                size="sm"
+                className={`text-xs sm:text-sm ${pathname?.startsWith('/platform') ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+              >
+                <LayoutDashboard className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">{t('platform.title').replace('MassaPro ', '')}</span>
+              </Button>
+            </Link>
 
             {/* Integration Setup nav link — visible to all authenticated users */}
             <Link href="/integration-setup">

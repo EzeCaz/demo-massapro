@@ -12,8 +12,22 @@ model User {
   email               String           @unique
   name                String?
   passwordHash        String?
-  role                String           @default("user") // "super_admin", "admin", or "user"
-  company             String?
+  role                String           @default("user") // "super_admin", "admin", "user", "demo"
+  company             String?           // legacy free-text field, kept for backward compat
+  companyId           String?          // FK to Company (new hierarchy)
+  companyRef          Company?          @relation("CompanyMembers", fields: [companyId], references: [id])
+  teamId              String?          // FK to Team (new hierarchy)
+  teamRef             Team?            @relation("TeamMembers", fields: [teamId], references: [id])
+  jobTitle            String?
+  phone               String?
+  linkedinUrl         String?
+  country             String?
+  city                String?
+  avatarUrl           String?
+  bio                 String?
+  status              String           @default("active") // "active", "pending", "suspended", "deleted"
+  approvedBy          String?          // user id of the super_admin who approved
+  approvedAt          DateTime?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   scenarios           Scenario[]
@@ -25,7 +39,16 @@ model User {
   adminNotesReceived  AdminNote[]      @relation("ReceivedNotes")
   invitesSent         Invite[]         @relation("SentInvites")
   invitesReceived     Invite[]         @relation("ReceivedInvites")
+  supportTickets      SupportTicket[]  @relation("SubmittedTickets")
+  assignedTickets     SupportTicket[]  @relation("AssignedTickets")
+  ticketComments      TicketComment[]
+  sowSnapshots        SOWSnapshot[]    @relation("OwnedSOWSnapshots")
 }
+
+// Self-relation note: User.approvedBy stores the id of the super_admin who
+// approved this user. We do NOT model it as a Prisma relation (would need
+// @unique on approvedBy, which we don't want — many users can share the
+// same approver). Read it as a plain string FK and join manually in API code.
 
 model Scenario {
   id                        String            @id @default(cuid())
@@ -364,4 +387,109 @@ model Invite {
   usedAt        DateTime?
   expiresAt     DateTime
   createdAt     DateTime  @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// NEW MODELS — Task 21 (Demo Platform, Hierarchical User Management, Support)
+// ---------------------------------------------------------------------------
+
+// A Company is a top-level unit in the user hierarchy. Users belong to a
+// Company. Each Company has multiple Teams. Only super_admin can create,
+// edit or delete Companies.
+model Company {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  status      String   @default("active") // "active" or "archived"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  members     User[]   @relation("CompanyMembers")
+  teams       Team[]
+}
+
+// A Team is a sub-unit within a Company. Users belong to one Team (within
+// their Company). Only super_admin can create, edit or delete Teams.
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  description String?
+  status      String   @default("active") // "active" or "archived"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  members     User[]   @relation("TeamMembers")
+
+  @@unique([companyId, name])
+}
+
+// Support ticket submitted by a user (any role) to MassaPro support.
+// Tickets are visible to: the submitter, assigned agent (admin/super_admin),
+// and super_admin. Tickets can have CC emails (additional recipients),
+// attachments, and a comment thread.
+model SupportTicket {
+  id            String   @id @default(cuid())
+  title         String
+  subject       String
+  description   String
+  priority      String   @default("normal") // "low", "normal", "high", "critical"
+  status        String   @default("open")   // "open", "in_progress", "resolved", "closed"
+  category      String?  // free-text — populated by MassaPro support later
+  submittedById String
+  submittedBy   User     @relation("SubmittedTickets", fields: [submittedById], references: [id])
+  assignedToId  String?
+  assignedTo   User?     @relation("AssignedTickets", fields: [assignedToId], references: [id])
+  ccEmails      Json?    // array of strings — CC email addresses
+  resolvedAt    DateTime?
+  closedAt      DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  attachments   SupportTicketAttachment[]
+  comments      TicketComment[]
+}
+
+// Attachment on a support ticket — file content stored in DB (serverless).
+model SupportTicketAttachment {
+  id           String   @id @default(cuid())
+  ticketId     String
+  ticket       SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fileName     String
+  fileType     String?
+  fileSize     Int?
+  data         Bytes?
+  createdAt    DateTime @default(now())
+}
+
+// Comment on a support ticket — used by MassaPro support staff to reply
+// to the submitter, and by the submitter to add follow-up info.
+model TicketComment {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+  content    String
+  isInternal Boolean  @default(false) // staff-only internal note (not shown to submitter)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// Persisted SOW documents — one per Company/project. The SOW Builder UI
+// at /sow generates a SOWSnapshot when the user clicks "Save to Platform".
+// (Auto-saved local-state drafts continue to live in localStorage; this
+// table is for the canonical saved version that the user wants to keep
+// on the platform and that admins can edit via the Global Admin tab.)
+model SOWSnapshot {
+  id              String   @id @default(cuid())
+  name            String
+  ownerId         String
+  owner           User     @relation("OwnedSOWSnapshots", fields: [ownerId], references: [id])
+  companyId       String?
+  teamId          String?
+  status          String   @default("draft") // "draft", "submitted", "approved", "rejected"
+  payload         Json     // full SOW state (cover, services, tasks, specs, milestones)
+  submittedAt     DateTime?
+  approvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

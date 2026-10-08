@@ -4,11 +4,12 @@ import { redirect } from 'next/navigation'
 
 /**
  * Root page — server-side redirect based on session role.
- * Using getServerSession (server component) instead of useSession (client)
- * to avoid the race condition that causes redirect loops.
  *
- * If the database isn't ready yet (tables don't exist), getServerSession
- * may throw — we catch that and redirect to /login gracefully.
+ * Per Task 21: all authenticated users land on the new MassaPro Demo
+ * Platform (/platform) which contains the Demo / Set Up / Support /
+ * Reporting / Profile / Global Admin tabs.
+ *
+ * Share sessions (magic-link) keep going to /s/[token].
  */
 export default async function HomePage() {
   let session = null
@@ -17,16 +18,21 @@ export default async function HomePage() {
     session = await getServerSession(authOptions)
   } catch (error) {
     // Database not ready yet — redirect to login page
-    // The login page will trigger /api/init if needed
     console.error('[page] getServerSession error:', error)
     redirect('/login')
   }
 
   if (session?.user) {
-    // All authenticated users go to /dashboard
-    // Admins can navigate to /admin from the header
-    redirect('/dashboard')
+    const role = (session.user as any).role
+    if (role === 'share') {
+      // Share sessions stay on their magic-link scoped setup
+      const setupId = (session.user as any).shareSetupId || ''
+      redirect(`/s/${setupId || ''}`)
+    }
+    // All other users go to the platform
+    redirect('/platform')
   }
 
   redirect('/login')
 }
+

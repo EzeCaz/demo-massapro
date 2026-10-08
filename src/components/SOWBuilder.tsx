@@ -1254,25 +1254,6 @@ export default function SOWBuilder() {
             </div>
           </CardContent>
         </Card>
-
-        {/* ====== Brand Book footer ====== */}
-        <Card style={{ borderColor: LAVENDER, background: LAVENDER }}>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3 mb-3">
-              <img src={MASSAPRO_LOGO_URL} alt="MassaPro" className="h-10 w-10 rounded-lg" style={{ background: WHITE }} />
-              <h3 className="font-bold" style={{ color: ORCHID }}>{t('sow.brand.book')}</h3>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <BrandSwatch label={t('sow.brand.orchid')} hex={ORCHID} fg={WHITE} />
-              <BrandSwatch label={t('sow.brand.white')} hex={WHITE} fg={JET} />
-              <BrandSwatch label={t('sow.brand.jet')} hex={JET} fg={WHITE} />
-              <BrandSwatch label={t('sow.brand.lavender')} hex={LAVENDER} fg={JET} />
-            </div>
-            <p className="text-xs mt-3" style={{ color: JET, opacity: 0.75 }}>
-              {t('sow.brand.font')} · {t('sow.export.savedHint')}
-            </p>
-          </CardContent>
-        </Card>
       </main>
     </div>
   )
@@ -1332,16 +1313,4 @@ function StatusDot({ status, small }: { status: TaskStatus; small?: boolean }) {
     blocked: '#EF4444',
   }
   return <span className={cn('inline-block rounded-full flex-shrink-0', size)} style={{ background: colorMap[status] }} />
-}
-
-function BrandSwatch({ label, hex, fg }: { label: string; hex: string; fg: string }) {
-  return (
-    <div
-      className="rounded-lg p-3 text-center"
-      style={{ background: hex, color: fg, border: `1px solid ${ORCHID}33` }}
-    >
-      <div className="text-xs font-semibold">{label}</div>
-      <div className="text-xs font-mono mt-0.5">{hex}</div>
-    </div>
-  )
 }

@@ -82,6 +82,16 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Invalid email or password')
         }
 
+        // Status check — only 'active' users can log in.
+        // - 'pending': super_admin has not approved yet
+        // - 'suspended': super_admin suspended the account
+        // - 'deleted': super_admin soft-deleted the account
+        if (user.status && user.status !== 'active') {
+          if (user.status === 'pending') throw new Error('Your account is pending admin approval')
+          if (user.status === 'suspended') throw new Error('Your account has been suspended. Contact support.')
+          if (user.status === 'deleted') throw new Error('Invalid email or password')
+        }
+
         const isValid = await bcrypt.compare(credentials.password, user.passwordHash)
         if (!isValid) {
           throw new Error('Invalid email or password')
