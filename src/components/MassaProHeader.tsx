@@ -2,7 +2,7 @@
 
 import { useLanguage } from '@/hooks/useLanguage'
 import { signOut, useSession } from 'next-auth/react'
-import { Globe, LogOut, Shield, LayoutDashboard, Crown, Plug, BarChart3 } from 'lucide-react'
+import { Globe, LogOut, Shield, LayoutDashboard, Crown, Plug, BarChart3, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -89,6 +89,18 @@ export default function MassaProHeader() {
               >
                 <Plug className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">{t('integration.title')}</span>
+              </Button>
+            </Link>
+
+            {/* SOW Builder nav link — visible to all authenticated users */}
+            <Link href="/sow">
+              <Button
+                variant={pathname?.startsWith('/sow') ? 'default' : 'ghost'}
+                size="sm"
+                className={`text-xs sm:text-sm ${pathname?.startsWith('/sow') ? 'bg-white text-navy' : 'text-white hover:bg-white/20'}`}
+              >
+                <FileText className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">{t('sow.title')}</span>
               </Button>
             </Link>
 
