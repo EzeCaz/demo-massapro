@@ -62,7 +62,7 @@ export default function SOWSubTab() {
           status: 'draft',
           payload: {
             cover: {
-              clientName: '', projectName: createName, date: new Date().toISOString().split('T')[0],
+              clientName: '', clientDemo: '', projectName: createName, date: new Date().toISOString().split('T')[0],
               version: 'v1.0', preparedBy: '', overview: '',
             },
             selectedServiceIds: [], // user picks services in the builder
@@ -105,7 +105,7 @@ export default function SOWSubTab() {
     try {
       const payload = s.payload || {}
       await exportSowWord({
-        cover: payload.cover || { clientName: '', projectName: s.name, date: '', version: 'v1.0', preparedBy: '', overview: '' },
+        cover: payload.cover || { clientName: '', clientDemo: '', projectName: s.name, date: '', version: 'v1.0', preparedBy: '', overview: '' },
         selectedServiceIds: payload.selectedServiceIds || [],
         customServices: payload.customServices || [],
         taskState: payload.taskState || {},

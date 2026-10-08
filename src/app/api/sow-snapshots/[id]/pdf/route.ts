@@ -256,6 +256,7 @@ export async function GET(
     // purple outer border, lavender inner dividers.
     const coverRows: [string, string][] = [
       ['Client', cover.clientName || '<client name>'],
+      ['Client Demo', cover.clientDemo || '<demo>'],
       ['Project', cover.projectName || '<project>'],
       ['Date', cover.date || '—'],
       ['Version', cover.version || 'v1.0'],
@@ -440,12 +441,32 @@ export async function GET(
         footerY,
         { width: CONTENT_WIDTH, align: 'center' }
       )
-      // Header — MassaPro • SOW — project name (skip on the cover page)
+      // Header — MassaPro (left) | SOW — project name (center) | Client Demo (right)
+      // Skip on the cover page (page 0) — the cover already has the gradient banner.
       if (i > 0) {
+        const headerY = 30
+        // Left — MassaPro
         doc.fontSize(8).fillColor(ORCHID).font('Helvetica-Bold')
-        doc.text('MassaPro  •  ', MARGIN, 30, { continued: true, width: CONTENT_WIDTH, align: 'right' })
+        doc.text('MassaPro', MARGIN, headerY, { width: 100, align: 'left' })
+        // Center — SOW — project name
         doc.fillColor(GREY).font('Helvetica')
-        doc.text('SOW — ' + (cover.projectName || 'Implementation of your MassaPro platform'))
+        doc.text(
+          'SOW — ' + (cover.projectName || 'Implementation of your MassaPro platform'),
+          MARGIN + 110,
+          headerY,
+          { width: CONTENT_WIDTH - 220, align: 'center' }
+        )
+        // Right — Client Demo (bold Orchid)
+        doc.fillColor(ORCHID).font('Helvetica-Bold')
+        doc.text(
+          'Client Demo: ' + (cover.clientDemo || '—'),
+          PAGE_WIDTH - MARGIN - 200,
+          headerY,
+          { width: 200, align: 'right' }
+        )
+        // Subtle divider line under the header
+        doc.moveTo(MARGIN, headerY + 12).lineTo(PAGE_WIDTH - MARGIN, headerY + 12)
+           .strokeColor(LAVENDER).lineWidth(0.5).stroke()
       }
     }
 

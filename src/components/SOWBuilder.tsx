@@ -69,6 +69,7 @@ interface SOWState {
 const DEFAULT_STATE: SOWState = {
   cover: {
     clientName: '',
+    clientDemo: '',
     projectName: '',
     date: new Date().toISOString().split('T')[0],
     version: 'v1.0',
@@ -605,6 +606,17 @@ export default function SOWBuilder({ snapshotId }: { snapshotId?: string } = {})
               )}
             </p>
           </div>
+          {/* Client Demo badge — top-right of the SOW page (mirrors the
+              Word / PDF page header). Only shown when a Client Demo is set. */}
+          {state.cover.clientDemo && (
+            <div
+              className="rounded-lg px-3 py-2 text-right"
+              style={{ background: ORCHID, color: WHITE }}
+            >
+              <div className="text-[10px] uppercase tracking-wide opacity-80">Client Demo</div>
+              <div className="text-sm font-bold">{state.cover.clientDemo}</div>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             {snapshotId && (
               <Button
@@ -667,6 +679,16 @@ export default function SOWBuilder({ snapshotId }: { snapshotId?: string } = {})
                   value={state.cover.clientName}
                   onChange={(e) => updateCover('clientName', e.target.value)}
                   placeholder="e.g., Acme Inc."
+                  style={{ borderColor: LAVENDER }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="clientDemo" style={{ color: JET }}>{t('sow.cover.clientDemo')}</Label>
+                <Input
+                  id="clientDemo"
+                  value={state.cover.clientDemo}
+                  onChange={(e) => updateCover('clientDemo', e.target.value)}
+                  placeholder="e.g., Acme Q4 Outbound Demo"
                   style={{ borderColor: LAVENDER }}
                 />
               </div>

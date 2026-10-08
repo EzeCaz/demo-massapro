@@ -34,6 +34,7 @@ const STORAGE_KEY = 'massapro-sow-state-v1'
 export interface SOWState {
   cover: {
     clientName: string
+    clientDemo: string
     projectName: string
     date: string
     version: string
@@ -49,6 +50,7 @@ export interface SOWState {
 const DEFAULT_STATE: SOWState = {
   cover: {
     clientName: '',
+    clientDemo: '',
     projectName: '',
     date: new Date().toISOString().split('T')[0],
     version: 'v1.0',

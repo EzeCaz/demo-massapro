@@ -98,7 +98,7 @@ export default function SOWFormEditSubTab() {
     try {
       const payload = s.payload || {}
       await exportSowWord({
-        cover: payload.cover || { clientName: '', projectName: s.name, date: '', version: 'v1.0', preparedBy: '', overview: '' },
+        cover: payload.cover || { clientName: '', clientDemo: '', projectName: s.name, date: '', version: 'v1.0', preparedBy: '', overview: '' },
         selectedServiceIds: payload.selectedServiceIds || [],
         customServices: payload.customServices || [],
         taskState: payload.taskState || {},

@@ -44,6 +44,8 @@ import {
   Footer,
   PageNumber,
   LineRuleType,
+  TabStopType,
+  TabStopPosition,
 } from 'docx'
 import { saveAs } from 'file-saver'
 import {
@@ -65,6 +67,7 @@ import {
 
 export interface SOWCoverInfo {
   clientName: string
+  clientDemo: string   // NEW — the specific Demo this SOW is for (e.g., "Acme Q4 Outbound Demo"). Shown on the top-right of every page.
   projectName: string
   date: string
   version: string
@@ -248,6 +251,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
       alignment: AlignmentType.CENTER,
       rows: [
         coverInfoRow('Client', cover.clientName || '<client name>'),
+        coverInfoRow('Client Demo', cover.clientDemo || '<demo>'),
         coverInfoRow('Project', cover.projectName || '<project>'),
         coverInfoRow('Date', cover.date || '—'),
         coverInfoRow('Version', cover.version || 'v1.0'),
@@ -634,13 +638,26 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
           default: new Header({
             children: [
               new Paragraph({
-                alignment: AlignmentType.RIGHT,
+                alignment: AlignmentType.LEFT,
+                tabStops: [
+                  { type: TabStopType.CENTER, position: 4500 },
+                  { type: TabStopType.RIGHT, position: 9000 },
+                ],
                 children: [
-                  new TextRun({ text: 'MassaPro  •  ', bold: true, size: 18, color: ORCHID, font: 'Calibri' }),
+                  new TextRun({ text: 'MassaPro', bold: true, size: 18, color: ORCHID, font: 'Calibri' }),
+                  new TextRun({ text: '\t', size: 18, font: 'Calibri' }),
                   new TextRun({
                     text: 'SOW — ' + (cover.projectName || 'Implementation of your MassaPro platform'),
                     size: 18,
                     color: GREY,
+                    font: 'Calibri',
+                  }),
+                  new TextRun({ text: '\t', size: 18, font: 'Calibri' }),
+                  new TextRun({
+                    text: 'Client Demo: ' + (cover.clientDemo || '—'),
+                    bold: true,
+                    size: 18,
+                    color: ORCHID,
                     font: 'Calibri',
                   }),
                 ],
