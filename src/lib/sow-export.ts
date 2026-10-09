@@ -241,7 +241,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     gradientRow(LAVENDER, 120, []),
     gradientRow(LAVENDER_LIGHT, 120, []),
     // Spacer
-    new Paragraph({ spacing: { before: 240, after: 240 }, children: [] }),
+    new Paragraph({ spacing: { before: 480, after: 320 }, children: [] }),
     // Cover info table — Soft Lavender label column, white value column,
     // purple outer border.
     new Table({
@@ -309,7 +309,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 360 },
+      spacing: { before: 600, after: 240 },
       children: [
         new TextRun({ text: WELCOME_PARAGRAPHS.subtitle, bold: true, size: 26, color: JET, font: 'Calibri' }),
       ],
@@ -317,9 +317,9 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     bodyParagraph(WELCOME_PARAGRAPHS.intro),
     bodyParagraph(WELCOME_PARAGRAPHS.body),
     // Benefits callout box
-    new Paragraph({ spacing: { before: 80, after: 0 }, children: [] }),
+    new Paragraph({ spacing: { before: 200, after: 0 }, children: [] }),
     benefitsCallout,
-    new Paragraph({ spacing: { before: 160, after: 0 }, children: [] }),
+    new Paragraph({ spacing: { before: 320, after: 0 }, children: [] }),
     bodyParagraph(WELCOME_PARAGRAPHS.closing),
     bodyParagraph(WELCOME_PARAGRAPHS.retention, { italic: true }),
     new Paragraph({ children: [new PageBreak()] }),
@@ -398,6 +398,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     if (svc.tasks.length === 0) {
       scopeChildren.push(
         new Paragraph({
+          spacing: { before: 80, after: 120 },
           children: [new TextRun({ text: 'No configuration items defined.', italics: true, size: 22, color: JET, font: 'Calibri' })],
         })
       )
@@ -405,13 +406,13 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
       svc.tasks.forEach((task) => {
         scopeChildren.push(bulletParagraph(brandClean(task.title), 0))
         if (task.description) {
-          scopeChildren.push(bodyParagraph(brandClean(task.description), { indent: 360, after: 80, size: 20 }))
+          scopeChildren.push(bodyParagraph(brandClean(task.description), { indent: 360, after: 160, size: 20 }))
         }
         if (task.subTasks && task.subTasks.length) {
           task.subTasks.forEach((sub) => {
             scopeChildren.push(bulletParagraph(brandClean(sub.title), 1))
             if (sub.description) {
-              scopeChildren.push(bodyParagraph(brandClean(sub.description), { indent: 720, after: 60, size: 20, color: GREY }))
+              scopeChildren.push(bodyParagraph(brandClean(sub.description), { indent: 720, after: 120, size: 20, color: GREY }))
             }
           })
         }
@@ -423,6 +424,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     if (svc.techSpecs.length === 0) {
       scopeChildren.push(
         new Paragraph({
+          spacing: { before: 80, after: 120 },
           children: [new TextRun({ text: 'No requirements defined.', italics: true, size: 22, color: JET, font: 'Calibri' })],
         })
       )
@@ -559,9 +561,9 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     ...SUPPORT_SECTIONS.ticketSubmission.map((b) => bodyParagraph(brandClean(b))),
     // Ticket template — rendered as a simple indented text block to mirror
     // the Connex PDF's monospace-style template box.
-    new Paragraph({ spacing: { before: 160, after: 60 } }),
+    new Paragraph({ spacing: { before: 240, after: 120 } }),
     ...SUPPORT_SECTIONS.ticketTemplate.map((line) =>
-      bodyParagraph(line, { indent: 360, size: 20, after: 40, color: JET })
+      bodyParagraph(line, { indent: 360, size: 20, after: 120, color: JET })
     ),
   ]
 
@@ -669,7 +671,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
       {
         properties: {
           page: {
-            margin: { top: 1080, right: 1080, bottom: 1080, left: 1080 },
+            margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
             size: { orientation: PageOrientation.PORTRAIT },
             // Orchid Purple page border on every page — cool design frame
             borders: {
@@ -797,9 +799,9 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
 // underlined, large.
 function sectionHeading(text: string): Paragraph {
   return new Paragraph({
-    spacing: { before: 320, after: 160 },
+    spacing: { before: 480, after: 240 },
     border: {
-      bottom: { color: '9333EA', space: 4, style: BorderStyle.SINGLE, size: 12 },
+      bottom: { color: '9333EA', space: 8, style: BorderStyle.SINGLE, size: 12 },
     },
     children: [
       new TextRun({
@@ -817,7 +819,7 @@ function sectionHeading(text: string): Paragraph {
 // jet black, no border.
 function subSectionHeading(text: string): Paragraph {
   return new Paragraph({
-    spacing: { before: 240, after: 100 },
+    spacing: { before: 320, after: 200 },
     children: [
       new TextRun({
         text,
@@ -846,8 +848,8 @@ function bodyParagraph(
   return new Paragraph({
     spacing: {
       before: opts.before ?? 0,
-      after: opts.after ?? 160,
-      line: 320,
+      after: opts.after ?? 240,
+      line: 360,
       lineRule: LineRuleType.AUTO,
     },
     indent: opts.indent ? { left: opts.indent } : undefined,
@@ -870,7 +872,7 @@ function bulletParagraph(text: string, level: number = 0): Paragraph {
   const indent = 360 + level * 360
   const bulletChar = level === 0 ? '●' : '○'
   return new Paragraph({
-    spacing: { before: 40, after: 40, line: 300, lineRule: LineRuleType.AUTO },
+    spacing: { before: 100, after: 100, line: 320, lineRule: LineRuleType.AUTO },
     indent: { left: indent, hanging: 200 },
     children: [
       new TextRun({ text: `${bulletChar}  `, size: 22, color: '9333EA', font: 'Calibri', bold: true }),
@@ -886,7 +888,7 @@ function coverInfoRow(label: string, value: string): TableRow {
     children: [
       new TableCell({
         width: { size: 35, type: WidthType.PERCENTAGE },
-        margins: { top: 80, bottom: 80, left: 120, right: 120 },
+        margins: { top: 160, bottom: 160, left: 200, right: 200 },
         shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F3E8FF' },
         children: [
           new Paragraph({
@@ -896,7 +898,7 @@ function coverInfoRow(label: string, value: string): TableRow {
       }),
       new TableCell({
         width: { size: 65, type: WidthType.PERCENTAGE },
-        margins: { top: 80, bottom: 80, left: 120, right: 120 },
+        margins: { top: 160, bottom: 160, left: 200, right: 200 },
         children: [
           new Paragraph({
             children: [new TextRun({ text: value, size: 22, color: '030712', font: 'Calibri' })],
@@ -911,7 +913,7 @@ function coverInfoRow(label: string, value: string): TableRow {
 // Soft Lavender body rows. Pass `stripe=true` on odd rows.
 function specHeaderCell(text: string): TableCell {
   return new TableCell({
-    margins: { top: 100, bottom: 100, left: 120, right: 120 },
+    margins: { top: 160, bottom: 160, left: 160, right: 160 },
     shading: { type: ShadingType.CLEAR, color: 'auto', fill: '9333EA' },
     children: [
       new Paragraph({
@@ -923,7 +925,7 @@ function specHeaderCell(text: string): TableCell {
 
 function specBodyCell(text: string, bold: boolean, stripe: boolean = false): TableCell {
   return new TableCell({
-    margins: { top: 80, bottom: 80, left: 120, right: 120 },
+    margins: { top: 140, bottom: 140, left: 160, right: 160 },
     shading: stripe
       ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F3E8FF' }
       : undefined,
@@ -953,7 +955,7 @@ const STATUS_TEXT_COLORS: Record<string, string> = {
 function statusCell(text: string, stripe: boolean = false, small: boolean = true): TableCell {
   const color = STATUS_TEXT_COLORS[text] || '030712'
   return new TableCell({
-    margins: { top: 60, bottom: 60, left: 80, right: 80 },
+    margins: { top: 120, bottom: 120, left: 100, right: 100 },
     shading: stripe
       ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F3E8FF' }
       : undefined,
@@ -968,7 +970,7 @@ function statusCell(text: string, stripe: boolean = false, small: boolean = true
 // Task table — same Orchid Purple header, alternating body rows.
 function taskHeaderCell(text: string): TableCell {
   return new TableCell({
-    margins: { top: 80, bottom: 80, left: 100, right: 100 },
+    margins: { top: 140, bottom: 140, left: 120, right: 120 },
     shading: { type: ShadingType.CLEAR, color: 'auto', fill: '9333EA' },
     children: [
       new Paragraph({
@@ -980,7 +982,7 @@ function taskHeaderCell(text: string): TableCell {
 
 function taskBodyCell(text: string, bold: boolean, stripe: boolean = false): TableCell {
   return new TableCell({
-    margins: { top: 60, bottom: 60, left: 80, right: 80 },
+    margins: { top: 120, bottom: 120, left: 140, right: 140 },
     shading: stripe
       ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F3E8FF' }
       : undefined,
