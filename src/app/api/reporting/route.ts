@@ -11,11 +11,19 @@ import { db } from '@/lib/db'
 //
 // GET /api/reporting
 //   → {
-//       tickets:    { byStatus, byPriority, recent, total, mine },
+//       tickets:    { byStatus, byPriority, recent, total, byDay },
 //       tasks:      { byStatus, byService, total, mine },
-//       integration: { total, byStatus, mine },
-//       sow:        { total, byStatus, mine }
+//       integration: { total, byStatus, byDay },
+//       sow:        { total, byStatus, recent, byDay },
+//       scenarios:  { byStatus, byDemo, total },
+//       demos:      { total, byOwner }
 //     }
+//
+// The cadence-by-day aggregations (tickets/integration/sow .byDay) are
+// 8-week daily series intended to feed line charts. The audits of the
+// Content Wizz platform identified this as the missing analytics layer;
+// we add it here so the MassaPro Reports tab can render real charts
+// instead of count-reading alone.
 //
 // Notes on "tasks": we don't have a server-side tasks table (SOW tasks
 // live in the SOWBuilder localStorage). We expose them via the SOWSnapshot
@@ -64,6 +72,11 @@ export async function GET() {
       _count: { _all: true },
     })
     const integrationTotal = await db.integrationSetup.count({ where: integrationWhere })
+    // Per-day cadence (last 56 days = 8 weeks) of integration setup submissions
+    const integrationSnapshots = await db.integrationSetup.findMany({
+      where: { ...integrationWhere, createdAt: { gte: new Date(Date.now() - 56 * 24 * 60 * 60 * 1000) } },
+      select: { createdAt: true },
+    })
 
     // ---- SOW Snapshots ----------------------------------------------------
     const sowWhere = isAdmin ? {} : { ownerId: user.id }
@@ -83,6 +96,42 @@ export async function GET() {
         payload: true,
       },
     })
+
+    // ---- Scenarios & Demos (added for analytics layer) -------------------
+    // Visible scenarios: for admins all, for users those they own or have
+    // DemoAccess to via their parent Demo. We reuse the Demo visibility
+    // query and join scenarios through demoId.
+    const visibleDemoWhere = isAdmin
+      ? {}
+      : {
+          OR: [
+            { ownerId: user.id },
+            { demoAccess: { some: { userId: user.id, role: { in: ['view', 'comment', 'edit'] } } } },
+          ],
+        }
+    const visibleDemos = await db.demo.findMany({
+      where: visibleDemoWhere,
+      select: {
+        id: true, name: true,
+        owner: { select: { id: true, name: true, email: true } },
+        _count: { select: { scenarios: true, demoAccess: true } },
+      },
+    })
+    const visibleDemoIds = visibleDemos.map((d) => d.id)
+    const scenarioWhere = visibleDemoIds.length
+      ? { demoId: { in: visibleDemoIds } }
+      : { id: 'none' } // impossible id → empty result for non-admins without demos
+    const scenarioByStatus = await db.scenario.groupBy({
+      by: ['status'],
+      where: scenarioWhere,
+      _count: { _all: true },
+    })
+    const scenarioByDemo = await db.scenario.groupBy({
+      by: ['demoId'],
+      where: scenarioWhere,
+      _count: { _all: true },
+    })
+    const scenarioTotal = await db.scenario.count({ where: scenarioWhere })
 
     // ---- Aggregate tasks across all SOW snapshots ------------------------
     // We parse each snapshot payload and count tasks by status (defaulting
@@ -134,6 +183,47 @@ export async function GET() {
       // reporting endpoint focuses on what the user has actively tracked.
     }
 
+    // ---- Build per-day cadence series (last 56 days) ---------------------
+    // Used by the Reports tab line chart for "Activity over the last 8 weeks".
+    // Returns an array of { date: 'YYYY-MM-DD', tickets: n, integrations: n, sows: n }
+    const DAY = 24 * 60 * 60 * 1000
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const days: { date: string; tickets: number; integrations: number; sows: number }[] = []
+    for (let i = 55; i >= 0; i--) {
+      const d = new Date(today.getTime() - i * DAY)
+      days.push({ date: d.toISOString().slice(0, 10), tickets: 0, integrations: 0, sows: 0 })
+    }
+    const dateIdx = new Map(days.map((d, i) => [d.date, i]))
+    for (const t of tickets) {
+      const key = new Date(t.createdAt).toISOString().slice(0, 10)
+      const idx = dateIdx.get(key)
+      if (idx !== undefined) days[idx].tickets += 1
+    }
+    for (const it of integrationSnapshots) {
+      const key = new Date(it.createdAt).toISOString().slice(0, 10)
+      const idx = dateIdx.get(key)
+      if (idx !== undefined) days[idx].integrations += 1
+    }
+    for (const sw of sowSnapshots) {
+      const key = new Date(sw.createdAt).toISOString().slice(0, 10)
+      const idx = dateIdx.get(key)
+      if (idx !== undefined) days[idx].sows += 1
+    }
+
+    // ---- Demo + scenario aggregation shape --------------------------------
+    const demosList = visibleDemos.map((d) => ({
+      id: d.id,
+      name: d.name,
+      owner: d.owner,
+      scenarioCount: d._count.scenarios,
+      accessCount: d._count.demoAccess,
+    }))
+    const scenarioByDemoMap: Record<string, number> = {}
+    for (const row of scenarioByDemo) {
+      scenarioByDemoMap[row.demoId] = row._count._all
+    }
+
     return NextResponse.json({
       tickets: {
         total: tickets.length,
@@ -173,6 +263,19 @@ export async function GET() {
         byStatus: taskByStatus,
         byService: taskByService,
       },
+      scenarios: {
+        total: scenarioTotal,
+        byStatus: scenarioByStatus.reduce((acc, row) => {
+          acc[row.status] = row._count._all
+          return acc
+        }, {} as Record<string, number>),
+        byDemo: scenarioByDemoMap,
+      },
+      demos: {
+        total: visibleDemos.length,
+        list: demosList,
+      },
+      cadence: days,
     })
   } catch (e: any) {
     console.error('[api/reporting GET]', e)
