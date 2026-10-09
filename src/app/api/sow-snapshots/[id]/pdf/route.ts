@@ -105,6 +105,7 @@ export async function GET(
     const doc = new PDFDocument({
       size: 'A4',
       margins: { top: 60, bottom: 60, left: MARGIN, right: MARGIN },
+      bufferPages: true, // REQUIRED — keeps pages buffered so we can draw headers/footers at the end via switchToPage()
       info: {
         Title: `SOW — ${snapshot.name}`,
         Author: 'MassaPro SOW Builder',
@@ -172,6 +173,14 @@ export async function GET(
       doc.fillColor(JET).font('Helvetica').fontSize(11)
     }
 
+    // Cursor for table drawing — doc.y is advanced as rows are drawn.
+    // Pagination-aware: when a row won't fit on the current page, we
+    // add a new page and re-draw the header row. Cell text uses
+    // lineBreak:false so a long value is truncated with ellipsis instead
+    // of wrapping and triggering runaway page creation (this was the
+    // root cause of the "328 pages + switchToPage out of bounds" bug).
+    const TABLE_BOTTOM_LIMIT = PAGE_HEIGHT - 70 // leave room for the footer
+
     const drawColoredTable = (
       headers: string[],
       rows: string[][],
@@ -183,29 +192,39 @@ export async function GET(
         : new Array(colCount).fill(CONTENT_WIDTH / colCount)
 
       const rowHeight = 22
-      const startY = doc.y
 
-      // Outer purple border (drawn first as background, then we draw cells on top)
-      doc.rect(MARGIN, startY, CONTENT_WIDTH, rowHeight + rows.length * rowHeight)
-         .lineWidth(1.5).strokeColor(ORCHID).stroke()
+      const drawHeaderRow = () => {
+        const y = doc.y
+        let hx = MARGIN
+        doc.rect(MARGIN, y, CONTENT_WIDTH, rowHeight).fill(ORCHID)
+        doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(10)
+        headers.forEach((h, i) => {
+          doc.text(h, hx + 6, y + 6, { width: widths[i] - 12, align: 'left', lineBreak: false })
+          hx += widths[i]
+        })
+        doc.y = y + rowHeight
+      }
 
-      // Header row — Orchid Purple fill, white bold text
-      let x = MARGIN
-      doc.rect(MARGIN, startY, CONTENT_WIDTH, rowHeight).fill(ORCHID)
-      doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(10)
-      headers.forEach((h, i) => {
-        doc.text(h, x + 6, startY + 6, { width: widths[i] - 12, align: 'left' })
-        x += widths[i]
-      })
+      // Make sure the header + at least one row fit; otherwise start a new page
+      if (doc.y + rowHeight * 2 > TABLE_BOTTOM_LIMIT) {
+        doc.addPage()
+      }
+      drawHeaderRow()
 
       // Body rows — alternating white / Soft Lavender
       rows.forEach((row, ri) => {
-        const y = startY + rowHeight + ri * rowHeight
+        // Page break if the row won't fit — re-draw the header on the new page
+        if (doc.y + rowHeight > TABLE_BOTTOM_LIMIT) {
+          doc.addPage()
+          drawHeaderRow()
+        }
+
+        const y = doc.y
         if (ri % 2 === 1) {
           doc.rect(MARGIN, y, CONTENT_WIDTH, rowHeight).fill(LAVENDER)
         }
         // Inner lavender vertical dividers
-        x = MARGIN
+        let x = MARGIN
         doc.strokeColor(LAVENDER).lineWidth(0.5)
         for (let i = 1; i < colCount; i++) {
           x += widths[i - 1]
@@ -214,16 +233,28 @@ export async function GET(
         // Inner lavender horizontal divider
         doc.moveTo(MARGIN, y).lineTo(MARGIN + CONTENT_WIDTH, y).stroke()
 
-        // Cell text
+        // Cell text — lineBreak:false + ellipsis so long values truncate
+        // instead of wrapping to a new page
         x = MARGIN
         doc.fillColor(JET).font('Helvetica').fontSize(9)
         row.forEach((cell, i) => {
-          doc.text(brandClean(cell), x + 6, y + 5, { width: widths[i] - 12, align: 'left', ellipsis: true })
+          doc.text(brandClean(cell), x + 6, y + 5, {
+            width: widths[i] - 12,
+            align: 'left',
+            lineBreak: false,
+            ellipsis: true,
+          })
           x += widths[i]
         })
+
+        doc.y = y + rowHeight
       })
 
-      doc.y = startY + rowHeight + rows.length * rowHeight + 6
+      // Bottom border of the table
+      doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y)
+         .strokeColor(ORCHID).lineWidth(1.5).stroke()
+
+      doc.y += 10
       doc.fillColor(JET).font('Helvetica').fontSize(11)
     }
 
@@ -432,14 +463,23 @@ export async function GET(
     const pageCount = doc.bufferedPageRange().count
     for (let i = 0; i < pageCount; i++) {
       doc.switchToPage(i)
-      // Footer — Page X of Y · MassaPro
+
+      // Save state + zero the bottom margin so footer text at the page
+      // bottom doesn't trigger a page break (the working integration-setups
+      // PDF route uses the same pattern).
+      const savedX = doc.x
+      const savedY = doc.y
+      const savedBottomMargin = doc.page.margins.bottom
+      doc.page.margins.bottom = 0
+
+      // Footer — Page X of Y · MassaPro (lineBreak:false prevents pagination)
       const footerY = PAGE_HEIGHT - 30
       doc.fontSize(8).fillColor(GREY).font('Helvetica')
       doc.text(
         `Page ${i + 1} of ${pageCount}  •  MassaPro SOW Builder`,
         MARGIN,
         footerY,
-        { width: CONTENT_WIDTH, align: 'center' }
+        { width: CONTENT_WIDTH, align: 'center', lineBreak: false }
       )
       // Header — MassaPro (left) | SOW — project name (center) | Client Demo (right)
       // Skip on the cover page (page 0) — the cover already has the gradient banner.
@@ -447,14 +487,14 @@ export async function GET(
         const headerY = 30
         // Left — MassaPro
         doc.fontSize(8).fillColor(ORCHID).font('Helvetica-Bold')
-        doc.text('MassaPro', MARGIN, headerY, { width: 100, align: 'left' })
+        doc.text('MassaPro', MARGIN, headerY, { width: 100, align: 'left', lineBreak: false })
         // Center — SOW — project name
         doc.fillColor(GREY).font('Helvetica')
         doc.text(
           'SOW — ' + (cover.projectName || 'Implementation of your MassaPro platform'),
           MARGIN + 110,
           headerY,
-          { width: CONTENT_WIDTH - 220, align: 'center' }
+          { width: CONTENT_WIDTH - 220, align: 'center', lineBreak: false, ellipsis: true }
         )
         // Right — Client Demo (bold Orchid)
         doc.fillColor(ORCHID).font('Helvetica-Bold')
@@ -462,12 +502,17 @@ export async function GET(
           'Client Demo: ' + (cover.clientDemo || '—'),
           PAGE_WIDTH - MARGIN - 200,
           headerY,
-          { width: 200, align: 'right' }
+          { width: 200, align: 'right', lineBreak: false, ellipsis: true }
         )
         // Subtle divider line under the header
         doc.moveTo(MARGIN, headerY + 12).lineTo(PAGE_WIDTH - MARGIN, headerY + 12)
            .strokeColor(LAVENDER).lineWidth(0.5).stroke()
       }
+
+      // Restore state
+      doc.page.margins.bottom = savedBottomMargin
+      doc.x = savedX
+      doc.y = savedY
     }
 
     doc.end()

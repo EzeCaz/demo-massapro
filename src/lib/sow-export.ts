@@ -46,6 +46,9 @@ import {
   LineRuleType,
   TabStopType,
   TabStopPosition,
+  PageBorderDisplay,
+  PageBorderOffsetFrom,
+  PageBorderZOrder,
 } from 'docx'
 import { saveAs } from 'file-saver'
 import {
@@ -186,20 +189,21 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     })
 
   const coverChildren: (Paragraph | Table)[] = [
-    // Gradient banner — top of cover (deepest Orchid)
-    gradientRow(ORCHID_DEEP, 1600, [
+    // Rich 6-band gradient banner — deep purple at the top fading down to
+    // lavender, with the logo floating in the darkest band.
+    gradientRow('4C1D95', 700, [
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { before: 600, after: 0 },
+        spacing: { before: 400, after: 0 },
         children: logoBuffer
           ? [new ImageRun({ data: logoBuffer, transformation: { width: 180, height: 180 }, type: 'png' } as any)]
           : [],
       }),
     ]),
-    // Mid Orchid band
-    gradientRow(ORCHID_MID, 200, []),
-    // Light Orchid (orchid)
-    gradientRow(ORCHID, 200, [
+    gradientRow(ORCHID_DEEP, 160, []),
+    gradientRow(ORCHID_MID, 160, []),
+    // Brand name — white on the orchid band
+    gradientRow(ORCHID, 220, [
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 0, after: 0 },
@@ -208,18 +212,18 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
         ],
       }),
     ]),
-    // Lavender band
-    gradientRow(LAVENDER, 200, [
+    // Lighter purple band with the document title
+    gradientRow('A855F7', 220, [
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 0, after: 0 },
         children: [
-          new TextRun({ text: 'Statement of Work', bold: true, size: 36, color: JET, font: 'Calibri' }),
+          new TextRun({ text: 'Statement of Work', bold: true, size: 36, color: WHITE, font: 'Calibri' }),
         ],
       }),
     ]),
-    // Very light lavender band
-    gradientRow(LAVENDER_LIGHT, 200, [
+    // Soft lavender band with the subtitle
+    gradientRow('C084FC', 200, [
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 0, after: 0 },
@@ -228,12 +232,14 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
             text: brandClean(`Implementation of your MassaPro platform`),
             italics: true,
             size: 24,
-            color: JET,
+            color: WHITE,
             font: 'Calibri',
           }),
         ],
       }),
     ]),
+    gradientRow(LAVENDER, 120, []),
+    gradientRow(LAVENDER_LIGHT, 120, []),
     // Spacer
     new Paragraph({ spacing: { before: 240, after: 240 }, children: [] }),
     // Cover info table — Soft Lavender label column, white value column,
@@ -264,6 +270,35 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
   // =========================================================================
   // SECTION 2 — Welcome Page (Connex template cover page 2)
   // =========================================================================
+  // Benefits callout box — a single-cell Soft Lavender table with a thick
+  // Orchid left border containing the benefits bullets. Cool design feature
+  // that makes the welcome page pop.
+  const benefitsCallout = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 4, color: LAVENDER },
+      bottom: { style: BorderStyle.SINGLE, size: 4, color: LAVENDER },
+      left: { style: BorderStyle.SINGLE, size: 24, color: ORCHID },
+      right: { style: BorderStyle.SINGLE, size: 4, color: LAVENDER },
+      insideHorizontal: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+      insideVertical: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+    },
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            shading: { type: ShadingType.CLEAR, color: 'auto', fill: LAVENDER },
+            margins: { top: 160, bottom: 160, left: 200, right: 200 },
+            children: [
+              ...WELCOME_PARAGRAPHS.benefits.map((b) => bulletParagraph(brandClean(b), 0)),
+            ],
+          }),
+        ],
+      }),
+    ],
+  })
+
   const welcomeChildren: (Paragraph | Table)[] = [
     new Paragraph({
       alignment: AlignmentType.CENTER,
@@ -281,9 +316,11 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     }),
     bodyParagraph(WELCOME_PARAGRAPHS.intro),
     bodyParagraph(WELCOME_PARAGRAPHS.body),
-    // Benefits list (Connex template)
-    ...WELCOME_PARAGRAPHS.benefits.map((b) => bulletParagraph(b, 0)),
-    bodyParagraph(WELCOME_PARAGRAPHS.closing, { before: 240 }),
+    // Benefits callout box
+    new Paragraph({ spacing: { before: 80, after: 0 }, children: [] }),
+    benefitsCallout,
+    new Paragraph({ spacing: { before: 160, after: 0 }, children: [] }),
+    bodyParagraph(WELCOME_PARAGRAPHS.closing),
     bodyParagraph(WELCOME_PARAGRAPHS.retention, { italic: true }),
     new Paragraph({ children: [new PageBreak()] }),
   ]
@@ -441,7 +478,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
             taskBodyCell(String(taskCounter), true, stripe),
             taskBodyCell(brandClean(task.title), false, stripe),
             taskBodyCell(brandClean(svc.name), false, stripe),
-            taskBodyCell(status, false, stripe),
+            statusCell(status, stripe),
             taskBodyCell(state.owner || '', false, stripe),
             taskBodyCell(state.dueDate || '', false, stripe),
             taskBodyCell(state.notes || '', false, stripe),
@@ -461,7 +498,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
                 taskBodyCell(`${taskCounter}`, true, subStripe),
                 taskBodyCell(`↳ ${brandClean(sub.title)}`, false, subStripe),
                 taskBodyCell(brandClean(svc.name), false, subStripe),
-                taskBodyCell(subStatus, false, subStripe),
+                statusCell(subStatus, subStripe),
                 taskBodyCell(subState.owner || '', false, subStripe),
                 taskBodyCell(subState.dueDate || '', false, subStripe),
                 taskBodyCell(subState.notes || '', false, subStripe),
@@ -560,7 +597,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
             children: [
               taskBodyCell(brandClean(m.task), false, i % 2 === 1),
               taskBodyCell(m.targetDate, false, i % 2 === 1),
-              taskBodyCell(m.status, false, i % 2 === 1),
+              statusCell(m.status, i % 2 === 1),
             ],
           })
         ),
@@ -619,6 +656,8 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     creator: 'MassaPro SOW Builder',
     title: `SOW — ${cover.projectName || 'Implementation of your MassaPro platform'}`,
     description: 'Generated by MassaPro SOW Builder',
+    // Subtle Soft Lavender page tint — displays as the page color in Word
+    background: { color: 'FAF5FF' },
     styles: {
       default: {
         document: {
@@ -632,33 +671,81 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
           page: {
             margin: { top: 1080, right: 1080, bottom: 1080, left: 1080 },
             size: { orientation: PageOrientation.PORTRAIT },
+            // Orchid Purple page border on every page — cool design frame
+            borders: {
+              pageBorders: {
+                display: PageBorderDisplay.ALL_PAGES,
+                offsetFrom: PageBorderOffsetFrom.PAGE,
+                zOrder: PageBorderZOrder.FRONT,
+              },
+              pageBorderTop: { style: BorderStyle.SINGLE, size: 12, color: '9333EA', space: 24 },
+              pageBorderRight: { style: BorderStyle.SINGLE, size: 12, color: '9333EA', space: 24 },
+              pageBorderBottom: { style: BorderStyle.SINGLE, size: 12, color: '9333EA', space: 24 },
+              pageBorderLeft: { style: BorderStyle.SINGLE, size: 12, color: '9333EA', space: 24 },
+            },
           },
         },
         headers: {
           default: new Header({
             children: [
-              new Paragraph({
-                alignment: AlignmentType.LEFT,
-                tabStops: [
-                  { type: TabStopType.CENTER, position: 4500 },
-                  { type: TabStopType.RIGHT, position: 9000 },
-                ],
-                children: [
-                  new TextRun({ text: 'MassaPro', bold: true, size: 18, color: ORCHID, font: 'Calibri' }),
-                  new TextRun({ text: '\t', size: 18, font: 'Calibri' }),
-                  new TextRun({
-                    text: 'SOW — ' + (cover.projectName || 'Implementation of your MassaPro platform'),
-                    size: 18,
-                    color: GREY,
-                    font: 'Calibri',
-                  }),
-                  new TextRun({ text: '\t', size: 18, font: 'Calibri' }),
-                  new TextRun({
-                    text: 'Client Demo: ' + (cover.clientDemo || '—'),
-                    bold: true,
-                    size: 18,
-                    color: ORCHID,
-                    font: 'Calibri',
+              // Gradient strip header — 3 cells from deep purple → mid → orchid,
+              // each carrying one piece of the header text in white.
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                borders: noBorderAll(),
+                rows: [
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        width: { size: 30, type: WidthType.PERCENTAGE },
+                        shading: { type: ShadingType.CLEAR, color: 'auto', fill: '6B21A8' },
+                        margins: { top: 60, bottom: 60, left: 100, right: 100 },
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({ text: 'MassaPro', bold: true, size: 18, color: WHITE, font: 'Calibri' }),
+                            ],
+                          }),
+                        ],
+                      }),
+                      new TableCell({
+                        width: { size: 40, type: WidthType.PERCENTAGE },
+                        shading: { type: ShadingType.CLEAR, color: 'auto', fill: '7E22CE' },
+                        margins: { top: 60, bottom: 60, left: 100, right: 100 },
+                        children: [
+                          new Paragraph({
+                            alignment: AlignmentType.CENTER,
+                            children: [
+                              new TextRun({
+                                text: 'SOW — ' + (cover.projectName || 'Implementation of your MassaPro platform'),
+                                size: 18,
+                                color: WHITE,
+                                font: 'Calibri',
+                              }),
+                            ],
+                          }),
+                        ],
+                      }),
+                      new TableCell({
+                        width: { size: 30, type: WidthType.PERCENTAGE },
+                        shading: { type: ShadingType.CLEAR, color: 'auto', fill: '9333EA' },
+                        margins: { top: 60, bottom: 60, left: 100, right: 100 },
+                        children: [
+                          new Paragraph({
+                            alignment: AlignmentType.RIGHT,
+                            children: [
+                              new TextRun({
+                                text: 'Client Demo: ' + (cover.clientDemo || '—'),
+                                bold: true,
+                                size: 18,
+                                color: WHITE,
+                                font: 'Calibri',
+                              }),
+                            ],
+                          }),
+                        ],
+                      }),
+                    ],
                   }),
                 ],
               }),
@@ -670,6 +757,9 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
             children: [
               new Paragraph({
                 alignment: AlignmentType.CENTER,
+                border: {
+                  top: { color: '9333EA', space: 4, style: BorderStyle.SINGLE, size: 6 },
+                },
                 children: [
                   new TextRun({ text: 'Page ', size: 18, color: GREY, font: 'Calibri' }),
                   new TextRun({ children: [PageNumber.CURRENT], size: 18, color: GREY, font: 'Calibri' }),
@@ -840,6 +930,36 @@ function specBodyCell(text: string, bold: boolean, stripe: boolean = false): Tab
     children: [
       new Paragraph({
         children: [new TextRun({ text, bold, size: 22, color: '030712', font: 'Calibri' })],
+      }),
+    ],
+  })
+}
+
+// Status colors — bold colored text for status values in tables.
+// Cool design feature: statuses are instantly scannable by color.
+const STATUS_TEXT_COLORS: Record<string, string> = {
+  'Pending': '6B7280',      // grey
+  'In Progress': 'D97706',  // amber
+  'Completed': '059669',    // emerald
+  'Blocked': 'DC2626',      // red
+  'Complete': '059669',
+  'Scheduled': '2563EB',    // blue
+  'draft': '6B7280',
+  'submitted': '2563EB',
+  'approved': '059669',
+  'rejected': 'DC2626',
+}
+
+function statusCell(text: string, stripe: boolean = false, small: boolean = true): TableCell {
+  const color = STATUS_TEXT_COLORS[text] || '030712'
+  return new TableCell({
+    margins: { top: 60, bottom: 60, left: 80, right: 80 },
+    shading: stripe
+      ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F3E8FF' }
+      : undefined,
+    children: [
+      new Paragraph({
+        children: [new TextRun({ text, bold: true, size: small ? 20 : 22, color, font: 'Calibri' })],
       }),
     ],
   })
