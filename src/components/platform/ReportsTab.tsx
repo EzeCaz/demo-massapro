@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useLanguage } from '@/hooks/useLanguage'
 import { toast } from 'sonner'
@@ -11,61 +11,48 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
 import {
-  BarChart3, FileText, Plug, LifeBuoy, ListChecks, Users,
-  Download, RefreshCw, Filter, Inbox, AlertCircle, Sparkles,
+  BarChart3, FileText, Plug, LifeBuoy, ListChecks, Filter, Users,
 } from 'lucide-react'
-import {
-  ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, XAxis,
-  YAxis, CartesianGrid, Tooltip as RTooltip, Legend, BarChart, Bar,
-} from 'recharts'
 
-// Shared status badge + chart color map — Rule #12 of the Best Practices
-// Playbook: one status, one badge, one definition.
+// Shared report primitives — see report-primitives.tsx for the full
+// library of charts, KPIs, empty states, CSV export, etc.
+import {
+  StatCard, ChartCard, DonutChart, CadenceChart, BarChartMini,
+  EmptyChartState, EmptyState, ErrorState, ReportHeader,
+  SkeletonBlock, downloadCsv, exportCsvToast,
+  ORCHID, JET, LAVENDER, WHITE, CHART_PALETTE,
+} from './report-primitives'
 import { StatusBadge, STATUS_COLORS, statusLabel } from './StatusBadge'
 
-const ORCHID = '#9333EA'
-const JET = '#030712'
-const LAVENDER = '#F3E8FF'
-const WHITE = '#FFFFFF'
-
-// Chart palette — derived from the brand book + status color system.
-const CHART_PALETTE = ['#9333EA', '#7E22CE', '#6B21A8', '#A855F7', '#C084FC', '#E9D5FF']
-
-// Filter types for the Summary tab — each filter applies to the entity it
-// controls (Rule #4 of the Best Practices Playbook).
 type ScopeFilter = 'all' | 'mine' | 'recent'
 
 // ============================================================
 // ReportsTab — applies the MassaPro Reporting Best Practices
 // Playbook to the platform's Reports main tab.
 //
-//   A) Summary       — KPI cards, real charts (donut/line/bar), live-filter counts
-//   B) Demos         — per-demo scenario list with status badges
-//   C) Integrations  — integration setup + SOW status breakdowns with cadence
-//   D) Support       — ticket status/priority with recent activity
+//   A) Summary       — KPI cards + charts (donut/line/bar) for all entities
+//   B) Demos         — full report: KPIs + charts + per-demo list + CSV
+//   C) Integrations  — full report: KPIs + charts + per-SOW list + CSV
+//   D) Support       — full report: KPIs + charts + per-ticket list + CSV
 //
-// Practices applied from the Best Practices Playbook:
-//   R1  Loading renders skeletons matching final content geometry
-//   R3  Filter option counts computed from the FULL dataset
-//   R5  Empty states distinguish no-data vs no-match and offer next action
-//   R6  Every mutation ends in a toast
-//   R12 Statuses use the shared StatusBadge + 6 reserved hue slots
-//   R13 Every icon-only control carries an ARIA label
+// Every sub-tab is now a full report (per user request: "all tabs
+// under reports should be reports, also apply the reporting style
+// and capabilities to the tabs under report").
 // ============================================================
 export default function ReportsTab() {
   const { t } = useLanguage()
   const [sub, setSub] = useState<string>('summary')
   const [scope, setScope] = useState<ScopeFilter>('all')
 
-  const { data: reporting, isLoading, isFetching, refetch } = useQuery({
+  const { data: reporting, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: ['reporting'],
     queryFn: async () => {
       const res = await fetch('/api/reporting')
       if (!res.ok) throw new Error('Failed to load reporting data')
       return res.json()
     },
+    retry: 1, // Don't retry forever — show the error state quickly
   })
   const { data: demosData } = useQuery({
     queryKey: ['demos'],
@@ -89,21 +76,27 @@ export default function ReportsTab() {
     toast.success('Reports refreshed', { description: 'Latest data fetched from the platform.' })
   }
 
-  const handleExport = () => {
-    const rows = buildExportRows(reporting, demosData, scenariosData)
-    if (rows.length === 0) {
-      toast.error('Nothing to export', { description: 'There is no report data to export yet.' })
-      return
-    }
-    downloadCsv('massapro-reports.csv', rows)
-    toast.success('Export ready', { description: `Exported ${rows.length} rows to massapro-reports.csv.` })
-  }
-
-  // R1: Loading renders skeletons matching the final content geometry,
-  // never zeros and never a blocking spinner. This is the platform's
-  // first convention (Table 2 of the Best Practices Playbook).
+  // R1: Skeleton loaders — never a blocking spinner, never zeros.
   if (isLoading) {
     return <ReportsSkeleton activeTab={sub} onTabChange={setSub} />
+  }
+
+  // Error state — if the API returns a 500, show a clear error message
+  // with a Retry button instead of silently rendering empty charts
+  // (which previously looked like "empty reporting").
+  if (isError) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: ORCHID }}>
+            <BarChart3 className="h-5 w-5" aria-hidden />
+            {t('reporting.title')}
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">{t('reporting.subtitle')}</p>
+        </div>
+        <ErrorState onRetry={() => refetch()} />
+      </div>
+    )
   }
 
   const demos = (demosData?.demos || []) as any[]
@@ -117,9 +110,7 @@ export default function ReportsTab() {
   const scenariosAgg = reporting?.scenarios || { byStatus: {}, byDemo: {}, total: 0 }
   const demosAgg = reporting?.demos || { total: 0, list: [] }
 
-  // R3: Live counts computed from the FULL dataset, never the visible subset.
-  // The scope filter narrows what's displayed but the filter dropdown itself
-  // always shows the truthful total.
+  // R3: Live counts computed from the FULL dataset
   const scopeFilteredScenarios = scope === 'recent'
     ? scenarios.filter((s: any) => {
         const created = new Date(s.createdAt).getTime()
@@ -133,17 +124,16 @@ export default function ReportsTab() {
       })
     : demos
 
-  // Cadence roll-up — last 8 weeks of activity across tickets/integrations/SOWs.
-  // Pre-computed by the API; here we just slice for the chart.
+  // Cadence chart data — MM-DD for x-axis, full date for tooltip
   const cadenceData = cadence.map((d) => ({
-    date: d.date.slice(5), // MM-DD for x-axis legibility
+    date: d.date.slice(5),
     full: d.date,
     tickets: d.tickets,
     integrations: d.integrations,
     sows: d.sows,
   }))
 
-  // Donut data for the status distribution chart (across all SOWs).
+  // Donut data for the Summary tab
   const sowStatusData = Object.entries(sow.byStatus).map(([k, v]) => ({
     name: statusLabel(k),
     value: v as number,
@@ -160,54 +150,36 @@ export default function ReportsTab() {
     color: STATUS_COLORS[k.toLowerCase().replace('-', '')] ||
             STATUS_COLORS[k.toLowerCase()] || '#A1A1AA',
   }))
-
-  // Bar data for cross-demo scenario comparison.
   const perDemoScenarios = demosAgg.list?.map((d: any) => ({
     name: d.name.length > 20 ? d.name.slice(0, 18) + '…' : d.name,
     fullName: d.name,
     scenarios: d.scenarioCount,
   })) || []
-
-  // Per-service task distribution.
   const taskServiceData = Object.entries(tasks.byService).map(([k, v]) => ({
     name: k,
     value: v as number,
   }))
 
+  // === CSV exports for each sub-tab ===
+  const handleSummaryExport = () => exportCsvToast(
+    buildSummaryRows({ demos, scenarios, integration, sow, tasks, tickets, demosAgg, scenariosAgg }),
+    'massapro-reports-summary.csv',
+  )
+  const handleDemosExport = () => exportCsvToast(
+    buildDemosRows({ demos: scopeFilteredDemos, scenarios: scopeFilteredScenarios }),
+    'massapro-reports-demos.csv',
+  )
+  const handleIntegrationsExport = () => exportCsvToast(
+    buildIntegrationsRows({ integration, sow, tasks }),
+    'massapro-reports-integrations.csv',
+  )
+  const handleSupportExport = () => exportCsvToast(
+    buildSupportRows({ tickets }),
+    'massapro-reports-support.csv',
+  )
+
   return (
     <div className="space-y-4">
-      {/* Page header — title, subtitle, primary actions */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: ORCHID }}>
-            <BarChart3 className="h-5 w-5" aria-hidden />
-            {t('reporting.title')}
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1">{t('reporting.subtitle')}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={isFetching}
-            aria-label="Refresh reports"
-          >
-            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} aria-hidden />
-            <span className="hidden sm:inline">Refresh</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExport}
-            aria-label="Export reports to CSV"
-          >
-            <Download className="h-4 w-4" aria-hidden />
-            <span className="hidden sm:inline">CSV</span>
-          </Button>
-        </div>
-      </div>
-
       <Tabs value={sub} onValueChange={setSub}>
         <TabsList>
           <TabsTrigger value="summary" className="text-xs sm:text-sm">
@@ -224,15 +196,23 @@ export default function ReportsTab() {
           </TabsTrigger>
         </TabsList>
 
+        {/* ================================================== */}
         {/* === Summary === */}
+        {/* ================================================== */}
         <TabsContent value="summary" className="focus-visible:outline-none space-y-4">
-          {/* Scope filter — R3: counts computed from the full dataset */}
+          <ReportHeader
+            title={t('reporting.title')}
+            subtitle={t('reporting.subtitle')}
+            onRefresh={handleRefresh}
+            onExport={handleSummaryExport}
+            isFetching={isFetching}
+          />
+
+          {/* Scope filter */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs" style={{ color: JET }}>
               <Filter className="h-3.5 w-3.5" aria-hidden />
-              <span className="font-semibold uppercase tracking-wide" style={{ opacity: 0.7 }}>
-                Scope
-              </span>
+              <span className="font-semibold uppercase tracking-wide" style={{ opacity: 0.7 }}>Scope</span>
               <Select value={scope} onValueChange={(v) => setScope(v as ScopeFilter)}>
                 <SelectTrigger className="h-8 w-[160px]" aria-label="Filter scope">
                   <SelectValue />
@@ -249,7 +229,7 @@ export default function ReportsTab() {
             </div>
           </div>
 
-          {/* KPI card row — 6 cards, responsive grid 2→3→6 */}
+          {/* KPI row */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <StatCard label="Demos" value={demosAgg.total} icon={<FileText className="h-5 w-5" />} />
             <StatCard label="Scenarios" value={scenariosAgg.total} icon={<ListChecks className="h-5 w-5" />} />
@@ -259,77 +239,54 @@ export default function ReportsTab() {
             <StatCard label="Tickets" value={tickets.total} icon={<LifeBuoy className="h-5 w-5" />} />
           </div>
 
-          {/* First chart row — donut for status mix + line for cadence */}
+          {/* First chart row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <ChartCard
-              title="SOW status distribution"
-              description="Live counts across all snapshots"
-            >
+            <ChartCard title="SOW status distribution" description="Live counts across all snapshots">
               {sowStatusData.length === 0 ? (
-                <EmptyChartState kind="no-data" message="No SOWs yet" />
+                <EmptyChartState message="No SOWs yet" />
               ) : (
                 <DonutChart data={sowStatusData} />
               )}
             </ChartCard>
-
-            <ChartCard
-              title="Activity over the last 8 weeks"
-              description="Daily tickets, integrations and SOWs created"
-              className="lg:col-span-2"
-            >
+            <ChartCard title="Activity over the last 8 weeks" description="Daily tickets, integrations and SOWs created" className="lg:col-span-2">
               {cadenceData.every((d) => d.tickets + d.integrations + d.sows === 0) ? (
-                <EmptyChartState kind="no-data" message="No activity in the last 8 weeks" />
+                <EmptyChartState message="No activity in the last 8 weeks" />
               ) : (
-                <CadenceChart data={cadenceData} />
+                <CadenceChart data={cadenceData} height={220} />
               )}
             </ChartCard>
           </div>
 
-          {/* Second chart row — task status donut + per-demo scenarios bar */}
+          {/* Second chart row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <ChartCard
-              title="Tasks by status"
-              description="Across every tracked SOW task"
-            >
+            <ChartCard title="Tasks by status" description="Across every tracked SOW task">
               {taskStatusData.length === 0 ? (
-                <EmptyChartState kind="no-data" message="No tasks tracked yet" />
+                <EmptyChartState message="No tasks tracked yet" />
               ) : (
                 <DonutChart data={taskStatusData} />
               )}
             </ChartCard>
-
-            <ChartCard
-              title="Scenarios per demo"
-              description="Cross-demo comparison"
-              className="lg:col-span-2"
-            >
+            <ChartCard title="Scenarios per demo" description="Cross-demo comparison" className="lg:col-span-2">
               {perDemoScenarios.length === 0 ? (
-                <EmptyChartState kind="no-data" message="No demos yet" />
+                <EmptyChartState message="No demos yet" />
               ) : (
                 <BarChartMini data={perDemoScenarios} />
               )}
             </ChartCard>
           </div>
 
-          {/* Third row — ticket priority + task service */}
+          {/* Third row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ChartCard
-              title="Support tickets by status"
-              description="Live counts from the ticket queue"
-            >
+            <ChartCard title="Support tickets by status" description="Live counts from the ticket queue">
               {ticketStatusData.length === 0 ? (
-                <EmptyChartState kind="no-data" message="No tickets yet" />
+                <EmptyChartState message="No tickets yet" />
               ) : (
                 <DonutChart data={ticketStatusData} />
               )}
             </ChartCard>
-
-            <ChartCard
-              title="Tasks per service"
-              description="Where the team's tracked effort sits"
-            >
+            <ChartCard title="Tasks per service" description="Where the team's tracked effort sits">
               {taskServiceData.length === 0 ? (
-                <EmptyChartState kind="no-data" message="No service breakdown yet" />
+                <EmptyChartState message="No service breakdown yet" />
               ) : (
                 <BarChartMini data={taskServiceData} />
               )}
@@ -337,14 +294,57 @@ export default function ReportsTab() {
           </div>
         </TabsContent>
 
+        {/* ================================================== */}
         {/* === Demos === */}
-        <TabsContent value="demos" className="focus-visible:outline-none">
+        {/* ================================================== */}
+        <TabsContent value="demos" className="focus-visible:outline-none space-y-4">
+          <ReportHeader
+            title="Demos report"
+            subtitle="Per-demo breakdown of scenarios, status and access count"
+            onRefresh={handleRefresh}
+            onExport={handleDemosExport}
+            isFetching={isFetching}
+          />
+
+          {/* KPI row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard label="Demos" value={demosAgg.total} icon={<FileText className="h-5 w-5" />} />
+            <StatCard label="Scenarios" value={scenariosAgg.total} icon={<ListChecks className="h-5 w-5" />} />
+            <StatCard label="Scenarios (Draft)" value={(scenariosAgg.byStatus as any)?.draft || 0} icon={<ListChecks className="h-5 w-5" />} color="#A1A1AA" />
+            <StatCard label="Scenarios (Approved)" value={(scenariosAgg.byStatus as any)?.approved || 0} icon={<ListChecks className="h-5 w-5" />} color="#10B981" />
+          </div>
+
+          {/* Charts row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ChartCard title="Scenarios by status" description="Distribution across all demos">
+              {Object.keys(scenariosAgg.byStatus || {}).length === 0 ? (
+                <EmptyChartState message="No scenarios yet" />
+              ) : (
+                <DonutChart
+                  data={Object.entries(scenariosAgg.byStatus).map(([k, v]) => ({
+                    name: statusLabel(k),
+                    value: v as number,
+                    color: STATUS_COLORS[k.toLowerCase().replace(/[\s_-]+/g, '-')] || '#A1A1AA',
+                  }))}
+                />
+              )}
+            </ChartCard>
+            <ChartCard title="Scenarios per demo" description="Cross-demo comparison">
+              {perDemoScenarios.length === 0 ? (
+                <EmptyChartState message="No demos yet" />
+              ) : (
+                <BarChartMini data={perDemoScenarios} />
+              )}
+            </ChartCard>
+          </div>
+
+          {/* Per-demo list */}
           <Card style={{ borderColor: LAVENDER }}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2" style={{ color: ORCHID }}>
-                <FileText className="h-5 w-5" aria-hidden /> Demos &amp; Scenarios
+                <FileText className="h-5 w-5" aria-hidden /> Demo breakdown
               </CardTitle>
-              <CardDescription>Per-demo breakdown of scenarios, status and access count</CardDescription>
+              <CardDescription>Per-demo scenario list with status and access count</CardDescription>
             </CardHeader>
             <CardContent className="pt-6 space-y-3">
               {scopeFilteredDemos.length === 0 ? (
@@ -371,17 +371,66 @@ export default function ReportsTab() {
           </Card>
         </TabsContent>
 
+        {/* ================================================== */}
         {/* === Integrations & SOW === */}
-        <TabsContent value="integrations" className="focus-visible:outline-none">
+        {/* ================================================== */}
+        <TabsContent value="integrations" className="focus-visible:outline-none space-y-4">
+          <ReportHeader
+            title="Integrations & SOW report"
+            subtitle="Per-setup and per-SOW breakdown with task status"
+            onRefresh={handleRefresh}
+            onExport={handleIntegrationsExport}
+            isFetching={isFetching}
+          />
+
+          {/* KPI row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard label="Integrations" value={integration.total} icon={<Plug className="h-5 w-5" />} />
+            <StatCard label="SOWs" value={sow.total} icon={<FileText className="h-5 w-5" />} />
+            <StatCard label="Tasks" value={tasks.total} icon={<ListChecks className="h-5 w-5" />} />
+            <StatCard label="Tasks (Completed)" value={(tasks.byStatus as any)?.completed || 0} icon={<ListChecks className="h-5 w-5" />} color="#10B981" />
+          </div>
+
+          {/* Charts row */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <ChartCard title="Integration setups by status">
+              {Object.keys(integration.byStatus || {}).length === 0 ? (
+                <EmptyChartState message="No integration setups yet" />
+              ) : (
+                <DonutChart
+                  data={Object.entries(integration.byStatus).map(([k, v]) => ({
+                    name: statusLabel(k),
+                    value: v as number,
+                    color: STATUS_COLORS[k.toLowerCase()] || '#A1A1AA',
+                  }))}
+                />
+              )}
+            </ChartCard>
+            <ChartCard title="SOW status distribution">
+              {sowStatusData.length === 0 ? (
+                <EmptyChartState message="No SOWs yet" />
+              ) : (
+                <DonutChart data={sowStatusData} />
+              )}
+            </ChartCard>
+            <ChartCard title="Tasks by status">
+              {taskStatusData.length === 0 ? (
+                <EmptyChartState message="No tasks tracked yet" />
+              ) : (
+                <DonutChart data={taskStatusData} />
+              )}
+            </ChartCard>
+          </div>
+
+          {/* Per-SOW list + task summary */}
           <Card style={{ borderColor: LAVENDER }}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2" style={{ color: ORCHID }}>
-                <Plug className="h-5 w-5" aria-hidden /> Integrations &amp; SOW
+                <FileText className="h-5 w-5" aria-hidden /> SOW documents
               </CardTitle>
-              <CardDescription>Per-setup and per-SOW breakdown with task status</CardDescription>
+              <CardDescription>Recent SOW snapshots with task breakdown</CardDescription>
             </CardHeader>
             <CardContent className="pt-6 space-y-3">
-              {/* SOW recent list */}
               {sow.recent && sow.recent.length > 0 ? (
                 sow.recent.map((s: any) => (
                   <div
@@ -407,7 +456,6 @@ export default function ReportsTab() {
                 />
               )}
 
-              {/* Task status summary */}
               <div className="rounded-lg p-3" style={{ background: LAVENDER }}>
                 <div className="text-xs font-semibold uppercase mb-2" style={{ color: JET }}>
                   Tasks across all SOWs (by status)
@@ -421,9 +469,7 @@ export default function ReportsTab() {
                     Object.entries(tasks.byStatus).map(([k, v]) => (
                       <div key={k} className="flex items-center gap-1.5">
                         <StatusBadge status={k} />
-                        <span className="text-xs font-bold" style={{ color: ORCHID }}>
-                          {v as number}
-                        </span>
+                        <span className="text-xs font-bold" style={{ color: ORCHID }}>{v as number}</span>
                       </div>
                     ))
                   )}
@@ -433,87 +479,92 @@ export default function ReportsTab() {
           </Card>
         </TabsContent>
 
+        {/* ================================================== */}
         {/* === Support === */}
-        <TabsContent value="support" className="focus-visible:outline-none">
+        {/* ================================================== */}
+        <TabsContent value="support" className="focus-visible:outline-none space-y-4">
+          <ReportHeader
+            title="Support report"
+            subtitle="Tickets by status, priority and recent activity"
+            onRefresh={handleRefresh}
+            onExport={handleSupportExport}
+            isFetching={isFetching}
+          />
+
+          {/* KPI row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard label="Tickets" value={tickets.total} icon={<LifeBuoy className="h-5 w-5" />} />
+            <StatCard label="Open" value={(tickets.byStatus as any)?.open || 0} icon={<LifeBuoy className="h-5 w-5" />} color="#A1A1AA" />
+            <StatCard label="In Progress" value={(tickets.byStatus as any)?.in_progress || 0} icon={<LifeBuoy className="h-5 w-5" />} color="#F59E0B" />
+            <StatCard label="Resolved" value={(tickets.byStatus as any)?.resolved || 0} icon={<LifeBuoy className="h-5 w-5" />} color="#10B981" />
+          </div>
+
+          {/* Charts row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ChartCard title="Tickets by status" description="Live counts from the ticket queue">
+              {ticketStatusData.length === 0 ? (
+                <EmptyChartState message="No tickets yet" />
+              ) : (
+                <DonutChart data={ticketStatusData} />
+              )}
+            </ChartCard>
+            <ChartCard title="Tickets by priority" description="Distribution across all tickets">
+              {Object.keys(tickets.byPriority || {}).length === 0 ? (
+                <EmptyChartState message="No tickets yet" />
+              ) : (
+                <DonutChart
+                  data={Object.entries(tickets.byPriority).map(([k, v]) => ({
+                    name: k.charAt(0).toUpperCase() + k.slice(1),
+                    value: v as number,
+                    color: k === 'critical' ? '#EF4444' : k === 'high' ? '#F59E0B' : k === 'normal' ? '#3B82F6' : '#A1A1AA',
+                  }))}
+                />
+              )}
+            </ChartCard>
+          </div>
+
+          {/* Ticket list */}
           <Card style={{ borderColor: LAVENDER }}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2" style={{ color: ORCHID }}>
-                <LifeBuoy className="h-5 w-5" aria-hidden /> Support
+                <LifeBuoy className="h-5 w-5" aria-hidden /> Recent tickets
               </CardTitle>
-              <CardDescription>Tickets by status, priority and recent activity</CardDescription>
+              <CardDescription>Latest tickets with status, priority, and assignee</CardDescription>
             </CardHeader>
             <CardContent className="pt-6 space-y-3">
-              {/* Status + priority summary bar */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-lg p-3" style={{ background: LAVENDER }}>
-                  <div className="text-xs font-semibold uppercase mb-2" style={{ color: JET }}>
-                    By status
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(tickets.byStatus).map(([k, v]) => (
-                      <div key={k} className="flex items-center gap-1">
-                        <StatusBadge status={k} />
-                        <span className="text-xs font-bold" style={{ color: ORCHID }}>{v as number}</span>
+              {tickets.recent && tickets.recent.length > 0 ? (
+                tickets.recent.map((tk: any) => (
+                  <div
+                    key={tk.id}
+                    className="rounded-lg border p-3 flex items-start justify-between gap-3"
+                    style={{ borderColor: LAVENDER, background: WHITE }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm truncate" style={{ color: JET }}>
+                        {tk.subject || tk.title}
                       </div>
-                    ))}
-                    {Object.keys(tickets.byStatus).length === 0 && (
-                      <span className="text-xs italic" style={{ color: JET, opacity: 0.6 }}>No tickets.</span>
-                    )}
-                  </div>
-                </div>
-                <div className="rounded-lg p-3" style={{ background: LAVENDER }}>
-                  <div className="text-xs font-semibold uppercase mb-2" style={{ color: JET }}>
-                    By priority
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(tickets.byPriority).map(([k, v]) => (
-                      <div key={k} className="flex items-center gap-1">
-                        <StatusBadge status={k === 'critical' ? 'blocked' : k === 'high' ? 'in-progress' : k === 'normal' ? 'pending' : 'approved'} />
-                        <span className="text-xs font-bold" style={{ color: ORCHID }}>{v as number}</span>
-                      </div>
-                    ))}
-                    {Object.keys(tickets.byPriority).length === 0 && (
-                      <span className="text-xs italic" style={{ color: JET, opacity: 0.6 }}>No tickets.</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Recent activity */}
-              <div className="pt-2">
-                <div className="text-xs font-semibold uppercase mb-2" style={{ color: JET, opacity: 0.7 }}>
-                  Recent tickets
-                </div>
-                {tickets.recent && tickets.recent.length > 0 ? (
-                  tickets.recent.map((tk: any) => (
-                    <div
-                      key={tk.id}
-                      className="rounded-lg border p-3 mb-2 flex items-start justify-between gap-3"
-                      style={{ borderColor: LAVENDER, background: WHITE }}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-sm truncate" style={{ color: JET }}>
-                          {tk.subject || tk.title}
-                        </div>
-                        <div className="text-xs mt-1" style={{ color: JET, opacity: 0.7 }}>
-                          By {tk.submittedBy?.email || '—'} · {new Date(tk.createdAt).toLocaleDateString()}
-                          {tk.assignedTo && ` · Assigned to ${tk.assignedTo.name || tk.assignedTo.email}`}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <StatusBadge status={tk.priority === 'critical' ? 'blocked' : tk.priority === 'high' ? 'in-progress' : tk.priority === 'normal' ? 'pending' : 'approved'} />
-                        <StatusBadge status={tk.status} />
+                      <div className="text-xs mt-1" style={{ color: JET, opacity: 0.7 }}>
+                        By {tk.submittedBy?.email || '—'} · {new Date(tk.createdAt).toLocaleDateString()}
+                        {tk.assignedTo && ` · Assigned to ${tk.assignedTo.name || tk.assignedTo.email}`}
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <EmptyState
-                    kind="no-data"
-                    message="No support tickets yet"
-                    hint="Open the Support tab to submit your first ticket"
-                  />
-                )}
-              </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <StatusBadge status={
+                        tk.priority === 'critical' ? 'blocked' :
+                        tk.priority === 'high' ? 'in-progress' :
+                        tk.priority === 'normal' ? 'pending' : 'approved'
+                      } />
+                      <StatusBadge status={tk.status} />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <EmptyState
+                  kind="no-data"
+                  message="No support tickets yet"
+                  hint="Open the Support tab to submit your first ticket"
+                />
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -525,220 +576,6 @@ export default function ReportsTab() {
 // ============================================================
 // Sub-components
 // ============================================================
-
-function StatCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
-  return (
-    <Card style={{ borderColor: LAVENDER }}>
-      <CardContent className="pt-4 pb-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs uppercase font-semibold tracking-wide" style={{ color: JET, opacity: 0.7 }}>
-            {label}
-          </span>
-          <span style={{ color: ORCHID }} aria-hidden>{icon}</span>
-        </div>
-        <div className="text-3xl font-extrabold" style={{ color: ORCHID }}>{value}</div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function ChartCard({
-  title, description, children, className,
-}: {
-  title: string
-  description?: string
-  children: React.ReactNode
-  className?: string
-}) {
-  return (
-    <Card className={className} style={{ borderColor: LAVENDER }}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2" style={{ color: ORCHID }}>
-          <Sparkles className="h-3.5 w-3.5" aria-hidden />
-          {title}
-        </CardTitle>
-        {description && <CardDescription className="text-xs">{description}</CardDescription>}
-      </CardHeader>
-      <CardContent className="pt-2">
-        {children}
-      </CardContent>
-    </Card>
-  )
-}
-
-function DonutChart({ data }: { data: { name: string; value: number; color: string }[] }) {
-  const total = data.reduce((s, d) => s + d.value, 0)
-  return (
-    <div className="h-[200px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={data}
-            dataKey="value"
-            nameKey="name"
-            innerRadius={50}
-            outerRadius={80}
-            paddingAngle={2}
-            stroke="#FFFFFF"
-            strokeWidth={2}
-          >
-            {data.map((d, i) => (
-              <Cell key={i} fill={d.color} />
-            ))}
-          </Pie>
-          <RTooltip
-            formatter={(value: number, name: string) => [
-              `${value} (${Math.round((value / total) * 100)}%)`,
-              name,
-            ]}
-          />
-          <Legend
-            verticalAlign="bottom"
-            height={36}
-            iconType="circle"
-            wrapperStyle={{ fontSize: 11 }}
-          />
-        </PieChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
-function CadenceChart({
-  data,
-}: {
-  data: { date: string; full: string; tickets: number; integrations: number; sows: number }[]
-}) {
-  return (
-    <div className="h-[220px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#F3E8FF" />
-          <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#52525B' }} interval={6} />
-          <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#52525B' }} />
-          <RTooltip
-            labelFormatter={(_, payload) => {
-              const p = payload?.[0]?.payload
-              return p?.full ? new Date(p.full).toLocaleDateString(undefined, {
-                year: 'numeric', month: 'short', day: 'numeric',
-              }) : ''
-            }}
-          />
-          <Legend
-            verticalAlign="top"
-            height={28}
-            iconType="line"
-            wrapperStyle={{ fontSize: 11 }}
-          />
-          <Line
-            type="monotone"
-            dataKey="tickets"
-            name="Tickets"
-            stroke="#9333EA"
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4 }}
-          />
-          <Line
-            type="monotone"
-            dataKey="integrations"
-            name="Integrations"
-            stroke="#10B981"
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4 }}
-          />
-          <Line
-            type="monotone"
-            dataKey="sows"
-            name="SOWs"
-            stroke="#F59E0B"
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4 }}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
-function BarChartMini({ data }: { data: { name: string; value: number; fullName?: string }[] }) {
-  const max = Math.max(1, ...data.map((d) => d.value))
-  return (
-    <div className="h-[220px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#F3E8FF" />
-          <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#52525B' }} interval={0} angle={-15} textAnchor="end" height={50} />
-          <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#52525B' }} />
-          <RTooltip formatter={(v: number, n, p: any) => [v, p?.payload?.fullName || n]} />
-          <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={48}>
-            {data.map((_, i) => (
-              <Cell key={i} fill={CHART_PALETTE[i % CHART_PALETTE.length]} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
-// EmptyChartState — distinguishes no-data from no-match per R5
-function EmptyChartState({ kind, message }: { kind: 'no-data' | 'no-match'; message: string }) {
-  return (
-    <div className="h-[200px] flex flex-col items-center justify-center text-center">
-      <div className="rounded-full p-3 mb-2" style={{ background: LAVENDER }} aria-hidden>
-        {kind === 'no-data' ? (
-          <Inbox className="h-6 w-6" style={{ color: ORCHID }} />
-        ) : (
-          <AlertCircle className="h-6 w-6" style={{ color: '#F59E0B' }} />
-        )}
-      </div>
-      <p className="text-xs italic" style={{ color: JET, opacity: 0.7 }}>{message}</p>
-    </div>
-  )
-}
-
-// EmptyState — R5: differentiate no-data from no-match, offer next action
-function EmptyState({
-  kind,
-  message,
-  hint,
-  onAction,
-  actionLabel,
-}: {
-  kind: 'no-data' | 'no-match'
-  message: string
-  hint?: string
-  onAction?: () => void
-  actionLabel?: string
-}) {
-  return (
-    <div className="rounded-lg p-8 text-center" style={{ background: LAVENDER }}>
-      <div className="inline-flex rounded-full p-3 mb-3" style={{ background: WHITE }} aria-hidden>
-        {kind === 'no-data' ? (
-          <Inbox className="h-6 w-6" style={{ color: ORCHID }} />
-        ) : (
-          <AlertCircle className="h-6 w-6" style={{ color: '#F59E0B' }} />
-        )}
-      </div>
-      <p className="text-sm font-semibold" style={{ color: JET }}>{message}</p>
-      {hint && <p className="text-xs mt-1 italic" style={{ color: JET, opacity: 0.7 }}>{hint}</p>}
-      {onAction && actionLabel && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-3"
-          onClick={onAction}
-          aria-label={actionLabel}
-        >
-          {actionLabel}
-        </Button>
-      )}
-    </div>
-  )
-}
 
 function DemoRow({ demo, scenarios }: { demo: any; scenarios: any[] }) {
   const demoScenarios = scenarios.filter((s: any) => s.demoId === demo.id)
@@ -776,8 +613,7 @@ function DemoRow({ demo, scenarios }: { demo: any; scenarios: any[] }) {
 }
 
 // ============================================================
-// Skeleton loader — R1: matches the final content geometry,
-// never zeros and never a blocking spinner.
+// Skeleton loader — R1
 // ============================================================
 function ReportsSkeleton({ activeTab, onTabChange }: {
   activeTab: string
@@ -796,14 +632,12 @@ function ReportsSkeleton({ activeTab, onTabChange }: {
         </div>
       </div>
 
-      {/* Tabs skeleton */}
       <div className="flex gap-1 border-b pb-2" style={{ borderColor: LAVENDER }}>
         {['Summary', 'Demos', 'Integrations', 'Support'].map((label) => (
           <SkeletonBlock key={label} className="h-8 w-24 rounded-md" />
         ))}
       </div>
 
-      {/* KPI row skeleton */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="rounded-lg border p-4" style={{ borderColor: LAVENDER }}>
@@ -813,7 +647,6 @@ function ReportsSkeleton({ activeTab, onTabChange }: {
         ))}
       </div>
 
-      {/* Chart row skeletons */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="rounded-lg border p-4 lg:col-span-1" style={{ borderColor: LAVENDER }}>
           <SkeletonBlock className="h-4 w-44 mb-2" />
@@ -830,28 +663,13 @@ function ReportsSkeleton({ activeTab, onTabChange }: {
   )
 }
 
-function SkeletonBlock({ className }: { className?: string }) {
-  return (
-    <div
-      className={`animate-pulse rounded ${className || ''}`}
-      style={{ background: LAVENDER }}
-    />
-  )
-}
-
 // ============================================================
-// CSV export — P1 from the Capabilities Audit: stakeholders
-// can take reporting data into decks and spreadsheets.
+// CSV export row builders — one per sub-tab
 // ============================================================
-function buildExportRows(reporting: any, demosData: any, scenariosData: any): any[] {
-  const rows: any[] = []
-  const demos = demosData?.demos || []
-  const scenarios = Array.isArray(scenariosData) ? scenariosData : []
-  const tickets = reporting?.tickets || { byStatus: {}, byPriority: {}, recent: [] }
-  const integration = reporting?.integration || { byStatus: {} }
-  const sow = reporting?.sow || { byStatus: {}, recent: [] }
-  const tasks = reporting?.tasks || { byStatus: {}, byService: {} }
 
+function buildSummaryRows(data: any): any[][] {
+  const { demos, scenarios, integration, sow, tasks, tickets, demosAgg, scenariosAgg } = data
+  const rows: any[][] = []
   rows.push(['Section', 'Key', 'Value'])
   rows.push(['Demos', 'Total', demos.length])
   rows.push(['Scenarios', 'Total', scenarios.length])
@@ -860,21 +678,63 @@ function buildExportRows(reporting: any, demosData: any, scenariosData: any): an
   rows.push(['Tasks', 'Total', tasks.total || 0])
   rows.push(['Tickets', 'Total', tickets.total || 0])
   rows.push(['', '', ''])
-
   rows.push(['SOW status', 'Status', 'Count'])
   Object.entries(sow.byStatus || {}).forEach(([k, v]) => rows.push(['SOW status', k, v as number]))
   rows.push(['', '', ''])
-
   rows.push(['Ticket status', 'Status', 'Count'])
-  Object.entries(tickets.byStatus || {}).forEach(([k, v]) =>
-    rows.push(['Ticket status', k, v as number]),
-  )
+  Object.entries(tickets.byStatus || {}).forEach(([k, v]) => rows.push(['Ticket status', k, v as number]))
   rows.push(['Ticket priority', 'Priority', 'Count'])
-  Object.entries(tickets.byPriority || {}).forEach(([k, v]) =>
-    rows.push(['Ticket priority', k, v as number]),
+  Object.entries(tickets.byPriority || {}).forEach(([k, v]) => rows.push(['Ticket priority', k, v as number]))
+  rows.push(['', '', ''])
+  rows.push(['Task status', 'Status', 'Count'])
+  Object.entries(tasks.byStatus || {}).forEach(([k, v]) => rows.push(['Task status', k, v as number]))
+  rows.push(['', '', ''])
+  rows.push(['Demo', 'Owner', 'Scenarios'])
+  demos.forEach((d: any) =>
+    rows.push([d.name, d.owner?.email || '—', d._count?.scenarios || 0]),
+  )
+  return rows
+}
+
+function buildDemosRows({ demos, scenarios }: { demos: any[]; scenarios: any[] }): any[][] {
+  const rows: any[][] = []
+  rows.push(['Demo', 'Owner', 'Scenarios', 'Status', 'Created'])
+  demos.forEach((demo) => {
+    const demoScenarios = scenarios.filter((s: any) => s.demoId === demo.id)
+    if (demoScenarios.length === 0) {
+      rows.push([demo.name, demo.owner?.email || '—', 0, '—', '—'])
+    } else {
+      demoScenarios.forEach((s) => {
+        rows.push([
+          demo.name,
+          demo.owner?.email || '—',
+          demoScenarios.length,
+          s.status,
+          new Date(s.createdAt).toLocaleDateString(),
+        ])
+      })
+    }
+  })
+  return rows
+}
+
+function buildIntegrationsRows({ integration, sow, tasks }: any): any[][] {
+  const rows: any[][] = []
+  rows.push(['Section', 'Key', 'Value'])
+  rows.push(['Integrations', 'Total', integration.total || 0])
+  rows.push(['SOWs', 'Total', sow.total || 0])
+  rows.push(['Tasks', 'Total', tasks.total || 0])
+  rows.push(['', '', ''])
+  rows.push(['Integration status', 'Status', 'Count'])
+  Object.entries(integration.byStatus || {}).forEach(([k, v]) =>
+    rows.push(['Integration status', k, v as number]),
   )
   rows.push(['', '', ''])
-
+  rows.push(['SOW status', 'Status', 'Count'])
+  Object.entries(sow.byStatus || {}).forEach(([k, v]) =>
+    rows.push(['SOW status', k, v as number]),
+  )
+  rows.push(['', '', ''])
   rows.push(['Task status', 'Status', 'Count'])
   Object.entries(tasks.byStatus || {}).forEach(([k, v]) =>
     rows.push(['Task status', k, v as number]),
@@ -884,36 +744,35 @@ function buildExportRows(reporting: any, demosData: any, scenariosData: any): an
     rows.push(['Task service', k, v as number]),
   )
   rows.push(['', '', ''])
-
-  rows.push(['Demo', 'Owner', 'Scenarios'])
-  demos.forEach((d: any) =>
-    rows.push([d.name, d.owner?.email || '—', d._count?.scenarios || 0]),
+  rows.push(['SOW', 'Status', 'Owner', 'Updated'])
+  sow.recent?.forEach((s: any) =>
+    rows.push([s.name, s.status, s.owner?.email || '—', new Date(s.updatedAt).toLocaleDateString()]),
   )
-
   return rows
 }
 
-function downloadCsv(filename: string, rows: any[]) {
-  const csv = rows
-    .map((row) =>
-      row
-        .map((cell) => {
-          const s = String(cell ?? '')
-          if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-            return `"${s.replace(/"/g, '""')}"`
-          }
-          return s
-        })
-        .join(','),
-    )
-    .join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
+function buildSupportRows({ tickets }: any): any[][] {
+  const rows: any[][] = []
+  rows.push(['Ticket', 'Subject', 'Status', 'Priority', 'Submitted by', 'Assigned to', 'Created'])
+  tickets.recent?.forEach((tk: any) => {
+    rows.push([
+      tk.id,
+      tk.subject || tk.title || '',
+      tk.status,
+      tk.priority,
+      tk.submittedBy?.email || '—',
+      tk.assignedTo?.name || tk.assignedTo?.email || '—',
+      new Date(tk.createdAt).toLocaleDateString(),
+    ])
+  })
+  rows.push(['', '', '', '', '', '', ''])
+  rows.push(['Status summary', 'Status', 'Count'])
+  Object.entries(tickets.byStatus || {}).forEach(([k, v]) =>
+    rows.push(['Status summary', k, v as number]),
+  )
+  rows.push(['Priority summary', 'Priority', 'Count'])
+  Object.entries(tickets.byPriority || {}).forEach(([k, v]) =>
+    rows.push(['Priority summary', k, v as number]),
+  )
+  return rows
 }

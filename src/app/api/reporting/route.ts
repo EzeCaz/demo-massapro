@@ -101,12 +101,18 @@ export async function GET() {
     // Visible scenarios: for admins all, for users those they own or have
     // DemoAccess to via their parent Demo. We reuse the Demo visibility
     // query and join scenarios through demoId.
+    //
+    // IMPORTANT: the Demo model's access relation is called `access`
+    // (not `demoAccess`), and DemoAccess has `accessLevel` (not `role`).
+    // Using the wrong field name here throws a Prisma validation error
+    // which surfaces as a 500 — that was the root cause of the "reporting
+    // is empty" bug.
     const visibleDemoWhere = isAdmin
       ? {}
       : {
           OR: [
             { ownerId: user.id },
-            { demoAccess: { some: { userId: user.id, role: { in: ['view', 'comment', 'edit'] } } } },
+            { access: { some: { userId: user.id, accessLevel: { in: ['view', 'comment', 'edit'] } } } },
           ],
         }
     const visibleDemos = await db.demo.findMany({
@@ -114,7 +120,7 @@ export async function GET() {
       select: {
         id: true, name: true,
         owner: { select: { id: true, name: true, email: true } },
-        _count: { select: { scenarios: true, demoAccess: true } },
+        _count: { select: { scenarios: true, access: true } },
       },
     })
     const visibleDemoIds = visibleDemos.map((d) => d.id)
@@ -217,7 +223,7 @@ export async function GET() {
       name: d.name,
       owner: d.owner,
       scenarioCount: d._count.scenarios,
-      accessCount: d._count.demoAccess,
+      accessCount: d._count.access,
     }))
     const scenarioByDemoMap: Record<string, number> = {}
     for (const row of scenarioByDemo) {

@@ -368,22 +368,36 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
   // =========================================================================
   // SECTION 4 — Scope (per-service Configuration + Requirements)
   // =========================================================================
+  // IMPORTANT: do NOT start each service on a new page — that balloons
+  // the document from ~15 pages to 28+ pages. Services flow naturally
+  // with a spacer between them; only major sections (Tracker, Infra,
+  // Support, Milestones, Signatures) get a PageBreak before them.
   const scopeChildren: (Paragraph | Table)[] = []
   let serviceIndex = 0
   for (const svc of allServices) {
     serviceIndex += 1
-    // "Scope / Phase 1 / <Service Name>" header block
+    // First service continues right after the overview; subsequent
+    // services get a visible separator (purple rule) instead of a page break.
+    if (serviceIndex > 1) {
+      scopeChildren.push(
+        new Paragraph({
+          spacing: { before: 360, after: 200 },
+          border: { bottom: { color: ORCHID, space: 8, style: BorderStyle.SINGLE, size: 6 } },
+          children: [],
+        })
+      )
+    }
+    // "Scope / Phase 1 / <Service Name>" header block — compact (no page break)
     scopeChildren.push(
-      new Paragraph({ children: [new PageBreak()] }),
       sectionHeading('Scope'),
       subSectionHeading('Phase 1'),
       new Paragraph({
-        spacing: { before: 80, after: 240 },
+        spacing: { before: 40, after: 160 },
         children: [
           new TextRun({
             text: brandClean(svc.name),
             bold: true,
-            size: 32,
+            size: 28, // 14pt — slightly smaller than before
             color: ORCHID,
             font: 'Calibri',
           }),
@@ -671,7 +685,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
       {
         properties: {
           page: {
-            margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+            margin: { top: 1080, right: 1080, bottom: 1080, left: 1080 },
             size: { orientation: PageOrientation.PORTRAIT },
             // Orchid Purple page border on every page — cool design frame
             borders: {
@@ -799,15 +813,15 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
 // underlined, large.
 function sectionHeading(text: string): Paragraph {
   return new Paragraph({
-    spacing: { before: 480, after: 240 },
+    spacing: { before: 320, after: 160 },
     border: {
-      bottom: { color: '9333EA', space: 8, style: BorderStyle.SINGLE, size: 12 },
+      bottom: { color: '9333EA', space: 6, style: BorderStyle.SINGLE, size: 12 },
     },
     children: [
       new TextRun({
         text,
         bold: true,
-        size: 32, // 16pt
+        size: 28, // 14pt
         color: '9333EA',
         font: 'Calibri',
       }),
@@ -819,12 +833,12 @@ function sectionHeading(text: string): Paragraph {
 // jet black, no border.
 function subSectionHeading(text: string): Paragraph {
   return new Paragraph({
-    spacing: { before: 320, after: 200 },
+    spacing: { before: 240, after: 120 },
     children: [
       new TextRun({
         text,
         bold: true,
-        size: 26, // 13pt
+        size: 24, // 12pt
         color: '030712',
         font: 'Calibri',
       }),
@@ -848,8 +862,8 @@ function bodyParagraph(
   return new Paragraph({
     spacing: {
       before: opts.before ?? 0,
-      after: opts.after ?? 240,
-      line: 360,
+      after: opts.after ?? 160,
+      line: 320, // 1.33x line spacing — compact but readable
       lineRule: LineRuleType.AUTO,
     },
     indent: opts.indent ? { left: opts.indent } : undefined,
@@ -872,7 +886,7 @@ function bulletParagraph(text: string, level: number = 0): Paragraph {
   const indent = 360 + level * 360
   const bulletChar = level === 0 ? '●' : '○'
   return new Paragraph({
-    spacing: { before: 100, after: 100, line: 320, lineRule: LineRuleType.AUTO },
+    spacing: { before: 60, after: 60, line: 300, lineRule: LineRuleType.AUTO },
     indent: { left: indent, hanging: 200 },
     children: [
       new TextRun({ text: `${bulletChar}  `, size: 22, color: '9333EA', font: 'Calibri', bold: true }),
@@ -888,7 +902,7 @@ function coverInfoRow(label: string, value: string): TableRow {
     children: [
       new TableCell({
         width: { size: 35, type: WidthType.PERCENTAGE },
-        margins: { top: 160, bottom: 160, left: 200, right: 200 },
+        margins: { top: 100, bottom: 100, left: 160, right: 160 },
         shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F3E8FF' },
         children: [
           new Paragraph({
@@ -898,7 +912,7 @@ function coverInfoRow(label: string, value: string): TableRow {
       }),
       new TableCell({
         width: { size: 65, type: WidthType.PERCENTAGE },
-        margins: { top: 160, bottom: 160, left: 200, right: 200 },
+        margins: { top: 100, bottom: 100, left: 160, right: 160 },
         children: [
           new Paragraph({
             children: [new TextRun({ text: value, size: 22, color: '030712', font: 'Calibri' })],
@@ -913,11 +927,11 @@ function coverInfoRow(label: string, value: string): TableRow {
 // Soft Lavender body rows. Pass `stripe=true` on odd rows.
 function specHeaderCell(text: string): TableCell {
   return new TableCell({
-    margins: { top: 160, bottom: 160, left: 160, right: 160 },
+    margins: { top: 100, bottom: 100, left: 120, right: 120 },
     shading: { type: ShadingType.CLEAR, color: 'auto', fill: '9333EA' },
     children: [
       new Paragraph({
-        children: [new TextRun({ text, bold: true, size: 22, color: 'FFFFFF', font: 'Calibri' })],
+        children: [new TextRun({ text, bold: true, size: 20, color: 'FFFFFF', font: 'Calibri' })],
       }),
     ],
   })
@@ -925,13 +939,13 @@ function specHeaderCell(text: string): TableCell {
 
 function specBodyCell(text: string, bold: boolean, stripe: boolean = false): TableCell {
   return new TableCell({
-    margins: { top: 140, bottom: 140, left: 160, right: 160 },
+    margins: { top: 80, bottom: 80, left: 120, right: 120 },
     shading: stripe
       ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F3E8FF' }
       : undefined,
     children: [
       new Paragraph({
-        children: [new TextRun({ text, bold, size: 22, color: '030712', font: 'Calibri' })],
+        children: [new TextRun({ text, bold, size: 20, color: '030712', font: 'Calibri' })],
       }),
     ],
   })
@@ -955,13 +969,13 @@ const STATUS_TEXT_COLORS: Record<string, string> = {
 function statusCell(text: string, stripe: boolean = false, small: boolean = true): TableCell {
   const color = STATUS_TEXT_COLORS[text] || '030712'
   return new TableCell({
-    margins: { top: 120, bottom: 120, left: 100, right: 100 },
+    margins: { top: 80, bottom: 80, left: 80, right: 80 },
     shading: stripe
       ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F3E8FF' }
       : undefined,
     children: [
       new Paragraph({
-        children: [new TextRun({ text, bold: true, size: small ? 20 : 22, color, font: 'Calibri' })],
+        children: [new TextRun({ text, bold: true, size: small ? 18 : 20, color, font: 'Calibri' })],
       }),
     ],
   })
@@ -970,11 +984,11 @@ function statusCell(text: string, stripe: boolean = false, small: boolean = true
 // Task table — same Orchid Purple header, alternating body rows.
 function taskHeaderCell(text: string): TableCell {
   return new TableCell({
-    margins: { top: 140, bottom: 140, left: 120, right: 120 },
+    margins: { top: 80, bottom: 80, left: 100, right: 100 },
     shading: { type: ShadingType.CLEAR, color: 'auto', fill: '9333EA' },
     children: [
       new Paragraph({
-        children: [new TextRun({ text, bold: true, size: 20, color: 'FFFFFF', font: 'Calibri' })],
+        children: [new TextRun({ text, bold: true, size: 18, color: 'FFFFFF', font: 'Calibri' })],
       }),
     ],
   })
@@ -982,13 +996,13 @@ function taskHeaderCell(text: string): TableCell {
 
 function taskBodyCell(text: string, bold: boolean, stripe: boolean = false): TableCell {
   return new TableCell({
-    margins: { top: 120, bottom: 120, left: 140, right: 140 },
+    margins: { top: 60, bottom: 60, left: 100, right: 100 },
     shading: stripe
       ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F3E8FF' }
       : undefined,
     children: [
       new Paragraph({
-        children: [new TextRun({ text, bold, size: 20, color: '030712', font: 'Calibri' })],
+        children: [new TextRun({ text, bold, size: 18, color: '030712', font: 'Calibri' })],
       }),
     ],
   })

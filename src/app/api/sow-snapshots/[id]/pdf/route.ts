@@ -164,11 +164,25 @@ export async function GET(
 
     const drawBullet = (text: string, level: number = 0) => {
       const indent = 20 + level * 20
+      const colWidth = CONTENT_WIDTH - indent
       const bullet = level === 0 ? '●' : '○'
+      // CRITICAL: both the bullet text() call and the body text() call
+      // MUST use the SAME width. If the bullet is rendered with a small
+      // width (e.g. 14) and `continued: true`, PDFKit constrains ALL
+      // subsequent text on that line to the SAME small width, causing
+      // character-by-character wrapping and 100+ page bloat.
       doc.fontSize(11).fillColor(ORCHID).font('Helvetica-Bold')
-      doc.text(bullet, MARGIN + indent, doc.y, { width: 14, continued: true })
+      doc.text(bullet + '   ', MARGIN + indent, doc.y, {
+        width: colWidth,
+        continued: true,
+        lineGap: 3,
+      })
       doc.fillColor(JET).font('Helvetica')
-      doc.text('  ' + brandClean(text), { width: CONTENT_WIDTH - indent - 14, align: 'left', lineGap: 3 })
+      doc.text(brandClean(text), {
+        width: colWidth,
+        align: 'left',
+        lineGap: 3,
+      })
       doc.y += 4
       doc.fillColor(JET).font('Helvetica').fontSize(11)
     }
@@ -338,8 +352,20 @@ export async function GET(
     }
 
     // ---- Scope (per-service) ---------------------------------------------
+    // IMPORTANT: do NOT start each service on a new page — that
+    // balloons the document. Services flow naturally; only major
+    // sections (Configuration Tracker, Infra, Support, Milestones,
+    // Signatures) get their own page break.
+    let firstService = true
     for (const svc of allServices) {
-      doc.addPage()
+      if (!firstService) {
+        // Just add a bit of spacing between services, not a full page break
+        doc.moveDown(30)
+        if (doc.y > PAGE_HEIGHT - 200) {
+          doc.addPage()
+        }
+      }
+      firstService = false
       drawSectionHeading('Scope')
       drawSubHeading('Phase 1')
       doc.fontSize(16).fillColor(ORCHID).font('Helvetica-Bold')
