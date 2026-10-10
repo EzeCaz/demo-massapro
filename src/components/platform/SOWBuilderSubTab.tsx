@@ -70,7 +70,7 @@ export default function SOWBuilderSubTab() {
           payload: {
             cover: {
               clientName: '', clientDemo: '', projectName: createName, date: new Date().toISOString().split('T')[0],
-              version: 'v1.0', preparedBy: '', overview: '',
+              version: 'v1.0', preparedBy: '', overview: '', clientLogo: '',
             },
             selectedServiceIds: [], // user picks services in the builder
             customServices: [],

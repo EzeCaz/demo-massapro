@@ -278,24 +278,141 @@ export async function GET(
       doc.fillColor(JET).font('Helvetica').fontSize(11)
     }
 
-    // ---- Cover Page ------------------------------------------------------
-    // Top spacer
-    doc.y = 60
-    drawGradientBanner(220)
+    // drawColoredTableWrap — like drawColoredTable but allows text to wrap
+    // inside cells. Row height grows to fit the wrapped content. This is
+    // used by the Configuration Tracker where the "Configuration Item"
+    // column contains long task titles that must wrap cleanly instead of
+    // being truncated with an ellipsis.
+    const drawColoredTableWrap = (
+      headers: string[],
+      rows: string[][],
+      columnWidths: number[] // percentages 0-100 — required for wrap tables
+    ) => {
+      const colCount = headers.length
+      const widths = columnWidths.map((p) => (CONTENT_WIDTH * p) / 100)
+      const minRowHeight = 22
+      const cellPadX = 6
+      const cellPadY = 5
 
-    // Logo (centered) — best-effort
+      const drawHeaderRow = () => {
+        const y = doc.y
+        let hx = MARGIN
+        doc.rect(MARGIN, y, CONTENT_WIDTH, minRowHeight).fill(ORCHID)
+        doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(10)
+        headers.forEach((h, i) => {
+          doc.text(h, hx + cellPadX, y + 6, { width: widths[i] - 12, align: 'left', lineBreak: false })
+          hx += widths[i]
+        })
+        doc.y = y + minRowHeight
+      }
+
+      if (doc.y + minRowHeight * 2 > TABLE_BOTTOM_LIMIT) {
+        doc.addPage()
+      }
+      drawHeaderRow()
+
+      rows.forEach((row, ri) => {
+        // Compute each cell's wrapped height by measuring the text against
+        // its column width. PDFKit's `doc.heightOfString(text, { width })`
+        // returns the rendered height including line breaks.
+        const cellHeights = row.map((cell, i) =>
+          Math.max(
+            minRowHeight - cellPadY * 2,
+            doc.heightOfString(brandClean(cell), {
+              width: widths[i] - cellPadX * 2,
+              font: 'Helvetica',
+              fontSize: 9,
+              lineGap: 2,
+            })
+          )
+        )
+        const rowH = Math.max(minRowHeight, Math.max(...cellHeights) + cellPadY * 2)
+
+        if (doc.y + rowH > TABLE_BOTTOM_LIMIT) {
+          doc.addPage()
+          drawHeaderRow()
+        }
+
+        const y = doc.y
+        if (ri % 2 === 1) {
+          doc.rect(MARGIN, y, CONTENT_WIDTH, rowH).fill(LAVENDER)
+        }
+        // Inner vertical dividers
+        let x = MARGIN
+        doc.strokeColor(LAVENDER).lineWidth(0.5)
+        for (let i = 1; i < colCount; i++) {
+          x += widths[i - 1]
+          doc.moveTo(x, y).lineTo(x, y + rowH).stroke()
+        }
+        // Inner horizontal divider
+        doc.moveTo(MARGIN, y).lineTo(MARGIN + CONTENT_WIDTH, y).stroke()
+
+        // Cell text — WRAPS inside the cell (no lineBreak:false, no ellipsis)
+        x = MARGIN
+        doc.fillColor(JET).font('Helvetica').fontSize(9)
+        row.forEach((cell, i) => {
+          doc.text(brandClean(cell), x + cellPadX, y + cellPadY, {
+            width: widths[i] - cellPadX * 2,
+            align: 'left',
+            lineGap: 2,
+          })
+          x += widths[i]
+        })
+
+        doc.y = y + rowH
+      })
+
+      doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y)
+         .strokeColor(ORCHID).lineWidth(1.5).stroke()
+      doc.y += 10
+      doc.fillColor(JET).font('Helvetica').fontSize(11)
+    }
+
+    // ---- Cover Page ------------------------------------------------------
+    // Layout (per user feedback): MassaPro logo at the TOP of the gradient
+    // banner, with "MassaPro" + "Statement of Work" text BELOW the logo
+    // (not on top of it). When a client logo is provided, it appears on
+    // the RIGHT side of the gradient banner, next to the MassaPro logo.
+    doc.y = 60
+    // Gradient banner — taller to fit the logo on top + text below
+    drawGradientBanner(280)
+
+    // Logos — MassaPro on the left, client logo on the right when provided
     const logoPath = path.join(process.cwd(), 'public', 'massapro-logo.png')
-    if (fs.existsSync(logoPath)) {
+    const hasMassaproLogo = fs.existsSync(logoPath)
+    // Decode the client logo data URL (base64) into a Buffer for PDFKit
+    const clientLogoBuffer = (() => {
+      if (!cover.clientLogo) return null
       try {
-        doc.image(logoPath, (PAGE_WIDTH - 100) / 2, 90, { width: 100, height: 100 })
+        const m = cover.clientLogo.match(/^data:[a-zA-Z0-9]+\/[a-zA-Z0-9.+-]+;base64,(.+)$/)
+        if (!m) return null
+        return Buffer.from(m[1], 'base64')
+      } catch {
+        return null
+      }
+    })()
+
+    // Draw MassaPro logo (left side or centered if no client logo)
+    if (hasMassaproLogo) {
+      try {
+        if (clientLogoBuffer) {
+          // MassaPro on the left, client logo on the right — both in the banner
+          doc.image(logoPath, MARGIN + 60, 80, { width: 80, height: 80 })
+          try {
+            doc.image(clientLogoBuffer, PAGE_WIDTH - MARGIN - 140, 80, { width: 80, height: 80 })
+          } catch {}
+        } else {
+          // MassaPro centered
+          doc.image(logoPath, (PAGE_WIDTH - 100) / 2, 80, { width: 100, height: 100 })
+        }
       } catch {}
     }
 
-    // "MassaPro" + "Statement of Work" centered in the banner area
-    doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(32)
-    doc.text('MassaPro', MARGIN, 130, { width: CONTENT_WIDTH, align: 'center' })
-    doc.fontSize(20).fillColor(WHITE)
-    doc.text('Statement of Work', MARGIN, 175, { width: CONTENT_WIDTH, align: 'center' })
+    // "MassaPro" + "Statement of Work" — BELOW the logo (not on top of it)
+    doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(28)
+    doc.text('MassaPro', MARGIN, 200, { width: CONTENT_WIDTH, align: 'center' })
+    doc.fontSize(18).fillColor(WHITE)
+    doc.text('Statement of Work', MARGIN, 235, { width: CONTENT_WIDTH, align: 'center' })
 
     // Below the gradient banner — project subtitle
     doc.moveDown(20)
@@ -434,12 +551,33 @@ export async function GET(
           state.dueDate || '',
           state.notes || '',
         ])
+        if (task.subTasks && task.subTasks.length) {
+          task.subTasks.forEach((sub) => {
+            taskCounter += 1
+            const subState = taskState[sub.id] || {}
+            const subStatus = subState.status ? STATUS_LABELS[subState.status as keyof typeof STATUS_LABELS] : STATUS_LABELS.pending
+            trackerRows.push([
+              String(taskCounter),
+              `↳ ${brandClean(sub.title)}`,
+              brandClean(svc.name),
+              subStatus,
+              subState.owner || '',
+              subState.dueDate || '',
+              subState.notes || '',
+            ])
+          })
+        }
       })
     })
-    drawColoredTable(
+    // Configuration Tracker — uses drawColoredTableWrap so the
+    // "Configuration Item" column wraps long task titles instead of
+    // truncating them. Column widths: #=4, Item=31 (40% wider than the
+    // default ~22 to fit long titles), Service=13, Status=10, Owner=11,
+    // Due=10, Notes=21.
+    drawColoredTableWrap(
       ['#', 'Configuration Item', 'Service', 'Status', 'Owner', 'Due', 'Notes'],
       trackerRows,
-      [5, 22, 14, 12, 12, 12, 23]
+      [4, 31, 13, 10, 11, 10, 21]
     )
 
     // ---- Infrastructure & Access Requirements ----------------------------
@@ -513,31 +651,56 @@ export async function GET(
         footerY,
         { width: CONTENT_WIDTH, align: 'center', lineBreak: false }
       )
-      // Header — MassaPro (left) | SOW — project name (center) | Client Demo (right)
-      // Skip on the cover page (page 0) — the cover already has the gradient banner.
+      // Header — MassaPro logo (left) | SOW — project name (center) |
+      // client logo (right) — or Client Demo text when no client logo is set.
+      // Skip on the cover page (page 0) — the cover already has the logos.
       if (i > 0) {
-        const headerY = 30
-        // Left — MassaPro
-        doc.fontSize(8).fillColor(ORCHID).font('Helvetica-Bold')
-        doc.text('MassaPro', MARGIN, headerY, { width: 100, align: 'left', lineBreak: false })
+        const headerY = 24
+        const headerLogoSize = 24
+        // Left — MassaPro logo (when available) — falls back to text
+        if (fs.existsSync(logoPath)) {
+          try {
+            doc.image(logoPath, MARGIN, headerY, { width: headerLogoSize, height: headerLogoSize })
+          } catch {
+            doc.fontSize(8).fillColor(ORCHID).font('Helvetica-Bold')
+            doc.text('MassaPro', MARGIN, headerY + 8, { width: 100, align: 'left', lineBreak: false })
+          }
+        } else {
+          doc.fontSize(8).fillColor(ORCHID).font('Helvetica-Bold')
+          doc.text('MassaPro', MARGIN, headerY + 8, { width: 100, align: 'left', lineBreak: false })
+        }
         // Center — SOW — project name
-        doc.fillColor(GREY).font('Helvetica')
+        doc.fillColor(GREY).font('Helvetica').fontSize(8)
         doc.text(
           'SOW — ' + (cover.projectName || 'Implementation of your MassaPro platform'),
           MARGIN + 110,
-          headerY,
+          headerY + 8,
           { width: CONTENT_WIDTH - 220, align: 'center', lineBreak: false, ellipsis: true }
         )
-        // Right — Client Demo (bold Orchid)
-        doc.fillColor(ORCHID).font('Helvetica-Bold')
-        doc.text(
-          'Client Demo: ' + (cover.clientDemo || '—'),
-          PAGE_WIDTH - MARGIN - 200,
-          headerY,
-          { width: 200, align: 'right', lineBreak: false, ellipsis: true }
-        )
+        // Right — client logo (when set) — falls back to Client Demo text
+        if (clientLogoBuffer) {
+          try {
+            doc.image(clientLogoBuffer, PAGE_WIDTH - MARGIN - headerLogoSize, headerY, { width: headerLogoSize, height: headerLogoSize })
+          } catch {
+            doc.fillColor(ORCHID).font('Helvetica-Bold').fontSize(8)
+            doc.text(
+              'Client Demo: ' + (cover.clientDemo || '—'),
+              PAGE_WIDTH - MARGIN - 200,
+              headerY + 8,
+              { width: 200, align: 'right', lineBreak: false, ellipsis: true }
+            )
+          }
+        } else {
+          doc.fillColor(ORCHID).font('Helvetica-Bold').fontSize(8)
+          doc.text(
+            'Client Demo: ' + (cover.clientDemo || '—'),
+            PAGE_WIDTH - MARGIN - 200,
+            headerY + 8,
+            { width: 200, align: 'right', lineBreak: false, ellipsis: true }
+          )
+        }
         // Subtle divider line under the header
-        doc.moveTo(MARGIN, headerY + 12).lineTo(PAGE_WIDTH - MARGIN, headerY + 12)
+        doc.moveTo(MARGIN, headerY + headerLogoSize + 4).lineTo(PAGE_WIDTH - MARGIN, headerY + headerLogoSize + 4)
            .strokeColor(LAVENDER).lineWidth(0.5).stroke()
       }
 

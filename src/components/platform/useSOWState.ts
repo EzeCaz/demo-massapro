@@ -40,6 +40,7 @@ export interface SOWState {
     version: string
     preparedBy: string
     overview: string
+    clientLogo?: string
   }
   selectedServiceIds: string[]
   customServices: any[]
@@ -56,6 +57,7 @@ const DEFAULT_STATE: SOWState = {
     version: 'v1.0',
     preparedBy: '',
     overview: '',
+    clientLogo: '',
   },
   selectedServiceIds: SERVICES.filter((s) => s.enabledByDefault).map((s) => s.id),
   customServices: [],

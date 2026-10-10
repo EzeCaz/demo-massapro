@@ -19,7 +19,7 @@ import {
   Phone, Smartphone, Mail, MessageSquare, MessageCircle, Share2, Instagram, Twitter,
   LayoutDashboard, Award, ClipboardCheck, Bot, Volume2, Mic, Plug, GraduationCap,
   Plus, Trash2, Download, RotateCcw, Save, FileText, CheckCircle2, Clock, Circle, XCircle,
-  Filter, Settings, ChevronDown, ChevronRight, Pencil, X, Sparkles, Layout,
+  Filter, Settings, ChevronDown, ChevronRight, Pencil, X, Sparkles, Layout, Image as ImageIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -75,6 +75,7 @@ const DEFAULT_STATE: SOWState = {
     version: 'v1.0',
     preparedBy: '',
     overview: '',
+    clientLogo: '',
   },
   selectedServiceIds: SERVICES.filter((s) => s.enabledByDefault).map((s) => s.id),
   customServices: [],
@@ -731,6 +732,67 @@ export default function SOWBuilder({ snapshotId }: { snapshotId?: string } = {})
                   placeholder="MassaPro Solutions Architect"
                   style={{ borderColor: LAVENDER }}
                 />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+                <Label htmlFor="clientLogo" style={{ color: JET }}>Client Logo</Label>
+                <p className="text-xs text-muted-foreground mb-1.5">
+                  Optional — appears on the cover page (right side, next to the MassaPro logo) and on the top-right of every other page header. PNG or JPG, square aspect ratio recommended.
+                </p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  {state.cover.clientLogo && (
+                    <div className="rounded-lg border p-2" style={{ borderColor: LAVENDER, background: '#fff' }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={state.cover.clientLogo}
+                        alt="Client logo preview"
+                        className="h-16 w-16 object-contain"
+                      />
+                    </div>
+                  )}
+                  <label
+                    htmlFor="clientLogoFile"
+                    className="inline-flex items-center gap-2 cursor-pointer rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:bg-opacity-80"
+                    style={{ borderColor: ORCHID, color: ORCHID, background: LAVENDER }}
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                    {state.cover.clientLogo ? 'Replace logo' : 'Upload logo'}
+                  </label>
+                  <input
+                    id="clientLogoFile"
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      if (file.size > 1_500_000) {
+                        toast.error('Logo too large', { description: 'Please upload an image under 1.5 MB.' })
+                        return
+                      }
+                      const reader = new FileReader()
+                      reader.onload = () => {
+                        const dataUrl = reader.result as string
+                        updateCover('clientLogo', dataUrl)
+                        toast.success('Client logo uploaded')
+                      }
+                      reader.onerror = () => toast.error('Failed to read file')
+                      reader.readAsDataURL(file)
+                      // Reset the input so the same file can be selected again
+                      e.target.value = ''
+                    }}
+                  />
+                  {state.cover.clientLogo && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => updateCover('clientLogo', '')}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
               </div>
               <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
                 <Label htmlFor="overview" style={{ color: JET }}>{t('sow.section.overview')}</Label>

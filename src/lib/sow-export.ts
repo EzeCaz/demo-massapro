@@ -76,6 +76,7 @@ export interface SOWCoverInfo {
   version: string
   preparedBy: string
   overview: string
+  clientLogo?: string  // NEW — optional client logo as a data URL (base64-encoded PNG/JPG). Rendered on the cover page (right side, next to MassaPro logo) and on the top-right of every other page header.
 }
 
 export interface SOWTaskState {
@@ -166,6 +167,18 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
   // white below it.
   // =========================================================================
 
+  // =========================================================================
+  // SECTION 1 — Cover Page
+  //
+  // Layout (per user feedback): MassaPro logo at the TOP of the gradient
+  // banner, with "MassaPro" + "Statement of Work" text BELOW the logo (not
+  // on top of it). When a client logo is provided, it appears on the RIGHT
+  // side of the gradient banner, next to the MassaPro logo on the left.
+  //
+  // Word doesn't support true gradients, so we simulate one by stacking
+  // full-width single-cell tables with progressively lighter Orchid shades.
+  // =========================================================================
+
   // Helper — a single full-width cell with a colored background. Used to
   // simulate the gradient banner.
   const gradientRow = (fill: string, height: number, children: (Paragraph | Table)[] = []) =>
@@ -188,21 +201,109 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
       ],
     })
 
+  // Decode the optional client logo data URL into an ArrayBuffer that
+  // ImageRun can consume. Returns null when no logo is set or the data
+  // URL is malformed.
+  const clientLogoBuffer = (() => {
+    if (!cover.clientLogo) return null
+    try {
+      const dataUrlMatch = cover.clientLogo.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9.+-]+);base64,(.+)$/)
+      if (!dataUrlMatch) return null
+      const base64 = dataUrlMatch[2]
+      const binary = atob(base64)
+      const len = binary.length
+      const bytes = new Uint8Array(len)
+      for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i)
+      return bytes.buffer
+    } catch {
+      return null
+    }
+  })()
+  const clientLogoType = (() => {
+    if (!cover.clientLogo) return 'png' as const
+    const m = cover.clientLogo.match(/^data:([a-zA-Z0-9]+\/([a-zA-Z0-9.+-]+));base64,/)
+    if (!m) return 'png' as const
+    const ext = m[2].toLowerCase()
+    if (ext === 'jpg' || ext === 'jpeg') return 'jpg' as any
+    if (ext === 'gif') return 'gif' as any
+    return 'png' as any
+  })()
+
+  // Two-column logo row — MassaPro logo on the LEFT, client logo on the RIGHT.
+  // Both sit in the darkest band of the gradient. When no client logo is set,
+  // the MassaPro logo is centered instead.
+  const logoRow = logoBuffer
+    ? (clientLogoBuffer
+        ? new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: noBorderAll(),
+            rows: [
+              new TableRow({
+                height: { value: 1800, rule: 'atLeast' as any },
+                children: [
+                  new TableCell({
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                    shading: { type: ShadingType.CLEAR, color: 'auto', fill: '4C1D95' },
+                    margins: { top: 200, bottom: 100, left: 100, right: 100 },
+                    borders: noBorderAll() as any,
+                    verticalAlign: 'center',
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [new ImageRun({ data: logoBuffer, transformation: { width: 180, height: 180 }, type: 'png' } as any)],
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                    shading: { type: ShadingType.CLEAR, color: 'auto', fill: '4C1D95' },
+                    margins: { top: 200, bottom: 100, left: 100, right: 100 },
+                    borders: noBorderAll() as any,
+                    verticalAlign: 'center',
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [new ImageRun({ data: clientLogoBuffer, transformation: { width: 180, height: 180 }, type: clientLogoType } as any)],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          })
+        : new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: noBorderAll(),
+            rows: [
+              new TableRow({
+                height: { value: 1800, rule: 'atLeast' as any },
+                children: [
+                  new TableCell({
+                    width: { size: 100, type: WidthType.PERCENTAGE },
+                    shading: { type: ShadingType.CLEAR, color: 'auto', fill: '4C1D95' },
+                    margins: { top: 200, bottom: 100, left: 0, right: 0 },
+                    borders: noBorderAll() as any,
+                    verticalAlign: 'center',
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [new ImageRun({ data: logoBuffer, transformation: { width: 180, height: 180 }, type: 'png' } as any)],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }))
+    : gradientRow('4C1D95', 1800, [])
+
   const coverChildren: (Paragraph | Table)[] = [
-    // Rich 6-band gradient banner — deep purple at the top fading down to
-    // lavender, with the logo floating in the darkest band.
-    gradientRow('4C1D95', 700, [
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 400, after: 0 },
-        children: logoBuffer
-          ? [new ImageRun({ data: logoBuffer, transformation: { width: 180, height: 180 }, type: 'png' } as any)]
-          : [],
-      }),
-    ]),
+    // Top: MassaPro logo (+ client logo on right when set). Text goes BELOW.
+    logoRow,
+    // Transition bands — purple → lavender → white
     gradientRow(ORCHID_DEEP, 160, []),
     gradientRow(ORCHID_MID, 160, []),
-    // Brand name — white on the orchid band
+    // Brand name — white on the orchid band, BELOW the logo
     gradientRow(ORCHID, 220, [
       new Paragraph({
         alignment: AlignmentType.CENTER,
@@ -212,7 +313,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
         ],
       }),
     ]),
-    // Lighter purple band with the document title
+    // Lighter purple band with the document title — BELOW the brand name
     gradientRow('A855F7', 220, [
       new Paragraph({
         alignment: AlignmentType.CENTER,
@@ -490,6 +591,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
       const stripe = stripeCounter % 2 === 1
       taskRows.push(
         new TableRow({
+          cantSplit: true, // keep multi-line rows together across page breaks
           children: [
             taskBodyCell(String(taskCounter), true, stripe),
             taskBodyCell(brandClean(task.title), false, stripe),
@@ -510,6 +612,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
           const subStripe = stripeCounter % 2 === 1
           taskRows.push(
             new TableRow({
+              cantSplit: true,
               children: [
                 taskBodyCell(`${taskCounter}`, true, subStripe),
                 taskBodyCell(`↳ ${brandClean(sub.title)}`, false, subStripe),
@@ -526,10 +629,14 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     })
   })
   if (taskRows.length > 1) {
+    // Column widths — Configuration Item is 40% wider than the other body
+    // columns so its text wraps cleanly instead of stacking on top of itself.
+    // #=4, Item=28 (the wide one), Service=14, Status=10, Owner=12, Due=10, Notes=22.
     trackerChildren.push(
       new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
         borders: tableBorders(),
+        columnWidths: [280, 1980, 990, 700, 850, 700, 1560],
         rows: taskRows,
       })
     )
@@ -704,18 +811,22 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
         headers: {
           default: new Header({
             children: [
-              // Gradient strip header — 3 cells from deep purple → mid → orchid,
-              // each carrying one piece of the header text in white.
+              // Header row — MassaPro logo on the LEFT, "SOW — project" in the
+              // center, client logo on the RIGHT. Per the user's spec: on all
+              // pages besides the first, MassaPro logo top-left and client
+              // logo top-right.
               new Table({
                 width: { size: 100, type: WidthType.PERCENTAGE },
                 borders: noBorderAll(),
                 rows: [
                   new TableRow({
                     children: [
+                      // Left cell — MassaPro text (or logo) on deep purple
                       new TableCell({
                         width: { size: 30, type: WidthType.PERCENTAGE },
                         shading: { type: ShadingType.CLEAR, color: 'auto', fill: '6B21A8' },
                         margins: { top: 60, bottom: 60, left: 100, right: 100 },
+                        verticalAlign: 'center',
                         children: [
                           new Paragraph({
                             children: [
@@ -724,10 +835,12 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
                           }),
                         ],
                       }),
+                      // Center cell — SOW + project name
                       new TableCell({
                         width: { size: 40, type: WidthType.PERCENTAGE },
                         shading: { type: ShadingType.CLEAR, color: 'auto', fill: '7E22CE' },
                         margins: { top: 60, bottom: 60, left: 100, right: 100 },
+                        verticalAlign: 'center',
                         children: [
                           new Paragraph({
                             alignment: AlignmentType.CENTER,
@@ -742,24 +855,29 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
                           }),
                         ],
                       }),
+                      // Right cell — client logo (when set) or Client Demo text
                       new TableCell({
                         width: { size: 30, type: WidthType.PERCENTAGE },
                         shading: { type: ShadingType.CLEAR, color: 'auto', fill: '9333EA' },
                         margins: { top: 60, bottom: 60, left: 100, right: 100 },
-                        children: [
-                          new Paragraph({
-                            alignment: AlignmentType.RIGHT,
-                            children: [
-                              new TextRun({
-                                text: 'Client Demo: ' + (cover.clientDemo || '—'),
-                                bold: true,
-                                size: 18,
-                                color: WHITE,
-                                font: 'Calibri',
-                              }),
-                            ],
-                          }),
-                        ],
+                        verticalAlign: 'center',
+                        children: clientLogoBuffer
+                          ? [new Paragraph({
+                              alignment: AlignmentType.RIGHT,
+                              children: [new ImageRun({ data: clientLogoBuffer, transformation: { width: 60, height: 60 }, type: clientLogoType } as any)],
+                            })]
+                          : [new Paragraph({
+                              alignment: AlignmentType.RIGHT,
+                              children: [
+                                new TextRun({
+                                  text: 'Client Demo: ' + (cover.clientDemo || '—'),
+                                  bold: true,
+                                  size: 18,
+                                  color: WHITE,
+                                  font: 'Calibri',
+                                }),
+                              ],
+                            })],
                       }),
                     ],
                   }),
