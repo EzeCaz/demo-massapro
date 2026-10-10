@@ -130,24 +130,23 @@ export async function GET(
     }
 
     const drawSectionHeading = (text: string) => {
-      doc.moveDown(20)
       ensureXMargin()
       const y = doc.y
       doc.fontSize(16).fillColor(ORCHID).font('Helvetica-Bold')
       doc.text(brandClean(text), MARGIN, y, { width: CONTENT_WIDTH })
-      doc.y += 8
+      doc.y += 4
       // Purple underline
       doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).strokeColor(ORCHID).lineWidth(1.5).stroke()
-      doc.y += 14
+      doc.y += 10
       doc.fillColor(JET).font('Helvetica').fontSize(11)
     }
 
     const drawSubHeading = (text: string) => {
-      doc.moveDown(8)
+      doc.y += 8
       ensureXMargin()
       doc.fontSize(13).fillColor(JET).font('Helvetica-Bold')
       doc.text(brandClean(text), MARGIN, doc.y, { width: CONTENT_WIDTH })
-      doc.y += 4
+      doc.y += 2
       doc.fillColor(JET).font('Helvetica').fontSize(11)
     }
 
@@ -159,7 +158,7 @@ export async function GET(
         align: 'left',
         lineGap: 4,
       })
-      doc.y += 6
+      doc.y += 4
       doc.fillColor(JET).font('Helvetica').fontSize(11)
     }
 
@@ -432,10 +431,10 @@ export async function GET(
     doc.text('Statement of Work', MARGIN, 235, { width: CONTENT_WIDTH, align: 'center' })
 
     // Below the gradient banner — project subtitle
-    doc.moveDown(20)
+    doc.y += 10
     doc.fillColor(JET).font('Helvetica-Oblique').fontSize(12)
     doc.text(brandClean('Implementation of your MassaPro platform'), MARGIN, doc.y, { width: CONTENT_WIDTH, align: 'center' })
-    doc.moveDown(20)
+    doc.y += 20
 
     // Cover info table — Soft Lavender label column, white value column,
     // purple outer border, lavender inner dividers.
@@ -459,10 +458,10 @@ export async function GET(
     doc.y = 80
     doc.fillColor(ORCHID).font('Helvetica-Bold').fontSize(28)
     doc.text('Welcome to MassaPro', MARGIN, doc.y, { width: CONTENT_WIDTH, align: 'center' })
-    doc.moveDown(6)
+    doc.y += 10
     doc.fillColor(JET).font('Helvetica-Bold').fontSize(16)
     doc.text(WELCOME_PARAGRAPHS.subtitle, MARGIN, doc.y, { width: CONTENT_WIDTH, align: 'center' })
-    doc.moveDown(20)
+    doc.y += 30
     drawBody(WELCOME_PARAGRAPHS.intro)
     drawBody(WELCOME_PARAGRAPHS.body)
     WELCOME_PARAGRAPHS.benefits.forEach((b) => drawBullet(b, 0))
@@ -500,7 +499,10 @@ export async function GET(
     for (const svc of allServices) {
       if (!firstService) {
         // Just add a bit of spacing between services, not a full page break
-        doc.moveDown(30)
+        doc.y += 20
+        // Add a purple separator rule between services
+        doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).strokeColor(ORCHID).lineWidth(1).stroke()
+        doc.y += 10
         if (doc.y > PAGE_HEIGHT - 200) {
           doc.addPage()
         }
