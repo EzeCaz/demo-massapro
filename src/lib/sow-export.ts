@@ -605,7 +605,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
         new TableRow({
           cantSplit: true, // keep multi-line rows together across page breaks
           children: [
-            taskBodyCell(String(taskCounter), true, stripe),
+            taskBodyCell(String(taskCounter), true, stripe, true), // noWrap=true for the # column
             taskBodyCell(brandClean(task.title), false, stripe),
             taskBodyCell(brandClean(svc.name), false, stripe),
             statusCell(status, stripe),
@@ -626,7 +626,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
             new TableRow({
               cantSplit: true,
               children: [
-                taskBodyCell(`${taskCounter}`, true, subStripe),
+                taskBodyCell(`${taskCounter}`, true, subStripe, true), // noWrap=true for the # column
                 taskBodyCell(`↳ ${brandClean(sub.title)}`, false, subStripe),
                 taskBodyCell(brandClean(svc.name), false, subStripe),
                 statusCell(subStatus, subStripe),
@@ -641,14 +641,17 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     })
   })
   if (taskRows.length > 1) {
-    // Column widths — Configuration Item is 40% wider than the other body
-    // columns so its text wraps cleanly instead of stacking on top of itself.
-    // #=4, Item=28 (the wide one), Service=14, Status=10, Owner=12, Due=10, Notes=22.
+    // Column widths (in twips, 1 inch = 1440 twips) — the # column is wide
+    // enough for "999" at 9pt with cell padding, so two-digit numbers like
+    // "56" don't wrap to "5"/"6" on separate lines. Configuration Item is
+    // 40% wider than the default body columns so its text wraps cleanly.
+    // #=700, Item=1960 (the wide one), Service=990, Status=700, Owner=850,
+    // Due=700, Notes=1560.
     trackerChildren.push(
       new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
         borders: tableBorders(),
-        columnWidths: [280, 1980, 990, 700, 850, 700, 1560],
+        columnWidths: [700, 1960, 990, 700, 850, 700, 1560],
         rows: taskRows,
       })
     )
@@ -1128,7 +1131,7 @@ function taskHeaderCell(text: string): TableCell {
   })
 }
 
-function taskBodyCell(text: string, bold: boolean, stripe: boolean = false): TableCell {
+function taskBodyCell(text: string, bold: boolean, stripe: boolean = false, noWrap: boolean = false): TableCell {
   return new TableCell({
     margins: { top: 60, bottom: 60, left: 100, right: 100 },
     shading: stripe
@@ -1136,6 +1139,9 @@ function taskBodyCell(text: string, bold: boolean, stripe: boolean = false): Tab
       : undefined,
     children: [
       new Paragraph({
+        alignment: noWrap ? AlignmentType.CENTER : AlignmentType.LEFT,
+        keepLines: noWrap, // prevent line breaks inside this paragraph (for the # column)
+        keepNext: true,
         children: [new TextRun({ text, bold, size: 18, color: '030712', font: 'Calibri' })],
       }),
     ],

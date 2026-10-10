@@ -283,10 +283,15 @@ export async function GET(
     // used by the Configuration Tracker where the "Configuration Item"
     // column contains long task titles that must wrap cleanly instead of
     // being truncated with an ellipsis.
+    //
+    // The optional `noWrapColumns` array (0-indexed) lets specific columns
+    // opt out of wrapping — useful for the "#" column where a two-digit
+    // number like "56" must NOT wrap to "5" / "6" on separate lines.
     const drawColoredTableWrap = (
       headers: string[],
       rows: string[][],
-      columnWidths: number[] // percentages 0-100 — required for wrap tables
+      columnWidths: number[], // percentages 0-100 — required for wrap tables
+      noWrapColumns: number[] = []
     ) => {
       const colCount = headers.length
       const widths = columnWidths.map((p) => (CONTENT_WIDTH * p) / 100)
@@ -315,8 +320,12 @@ export async function GET(
         // Compute each cell's wrapped height by measuring the text against
         // its column width. PDFKit's `doc.heightOfString(text, { width })`
         // returns the rendered height including line breaks.
-        const cellHeights = row.map((cell, i) =>
-          Math.max(
+        // For noWrapColumns, the height is always 1 line (no wrapping).
+        const cellHeights = row.map((cell, i) => {
+          if (noWrapColumns.includes(i)) {
+            return Math.max(minRowHeight - cellPadY * 2, 12) // single line height
+          }
+          return Math.max(
             minRowHeight - cellPadY * 2,
             doc.heightOfString(brandClean(cell), {
               width: widths[i] - cellPadX * 2,
@@ -325,7 +334,7 @@ export async function GET(
               lineGap: 2,
             })
           )
-        )
+        })
         const rowH = Math.max(minRowHeight, Math.max(...cellHeights) + cellPadY * 2)
 
         if (doc.y + rowH > TABLE_BOTTOM_LIMIT) {
@@ -348,14 +357,24 @@ export async function GET(
         doc.moveTo(MARGIN, y).lineTo(MARGIN + CONTENT_WIDTH, y).stroke()
 
         // Cell text — WRAPS inside the cell (no lineBreak:false, no ellipsis)
+        // EXCEPT for noWrapColumns which render on a single line.
         x = MARGIN
         doc.fillColor(JET).font('Helvetica').fontSize(9)
         row.forEach((cell, i) => {
-          doc.text(brandClean(cell), x + cellPadX, y + cellPadY, {
-            width: widths[i] - cellPadX * 2,
-            align: 'left',
-            lineGap: 2,
-          })
+          if (noWrapColumns.includes(i)) {
+            // Single line, no wrapping — centered horizontally in the cell
+            doc.text(brandClean(cell), x + cellPadX, y + cellPadY, {
+              width: widths[i] - cellPadX * 2,
+              align: 'center',
+              lineBreak: false,
+            })
+          } else {
+            doc.text(brandClean(cell), x + cellPadX, y + cellPadY, {
+              width: widths[i] - cellPadX * 2,
+              align: 'left',
+              lineGap: 2,
+            })
+          }
           x += widths[i]
         })
 
@@ -590,13 +609,15 @@ export async function GET(
     })
     // Configuration Tracker — uses drawColoredTableWrap so the
     // "Configuration Item" column wraps long task titles instead of
-    // truncating them. Column widths: #=4, Item=31 (40% wider than the
-    // default ~22 to fit long titles), Service=13, Status=10, Owner=11,
-    // Due=10, Notes=21.
+    // truncating them. Column widths: #=7 (wide enough for "999" at 9pt),
+    // Item=28 (the wide one), Service=13, Status=10, Owner=11, Due=10,
+    // Notes=21. The # column is passed as noWrap so two-digit numbers like
+    // "56" don't wrap to "5"/"6" on separate lines.
     drawColoredTableWrap(
       ['#', 'Configuration Item', 'Service', 'Status', 'Owner', 'Due', 'Notes'],
       trackerRows,
-      [4, 31, 13, 10, 11, 10, 21]
+      [7, 28, 13, 10, 11, 10, 21],
+      [0] // noWrapColumns — the # column
     )
 
     // ---- Infrastructure & Access Requirements ----------------------------
