@@ -798,6 +798,7 @@ export async function GET(
           S: 'GoTo',
           D: [destPageRef, 'XYZ', MARGIN, entry.dest.y, null],
         })
+        actionRef.end()
 
         // Create the link annotation as an indirect object
         const linkRef = doc.ref({
@@ -807,12 +808,10 @@ export async function GET(
           Border: [0, 0, 0],
           A: actionRef,
         })
+        linkRef.end()
 
         // Add the annotation to the TOC page's Annots array
-        if (!doc.page.data.Annots) {
-          doc.page.data.Annots = []
-        }
-        doc.page.data.Annots.push(linkRef)
+        doc.page.annotations.push(linkRef)
       }
     }
 
