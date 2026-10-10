@@ -37,14 +37,25 @@ export const dynamic = 'force-dynamic'
 // =========================================================================
 
 // MassaPro brand book colors
-const ORCHID = '#9333EA'
-const ORCHID_DEEP = '#6B21A8'
-const ORCHID_MID = '#7E22CE'
-const LAVENDER = '#F3E8FF'
-const LAVENDER_LIGHT = '#FAF5FF'
-const JET = '#030712'
+// MassaPro Visual & Design System — dark immersive gradient + electric violet accents
+// Color palette:
+//   Dark background:   #0A0711 (near-black) → #241445 (rich royal/indigo-violet)
+//   Primary accent:    #7F39FB (electric violet/purple)
+//   Stark white:       #FFFFFF (backgrounds, body text on dark)
+//   Secondary accents: #9D4FDB, #B47CF5, #5B2D9E
+const DARK_NEAR_BLACK = '#0A0711'
+const DARK_INDIGO = '#241445'
+const DARK_VIOLET = '#3D1F6B'
+const ORCHID = '#7F39FB'        // electric violet — primary accent
+const ORCHID_DEEP = '#5B2D9E'
+const ORCHID_MID = '#9D4FDB'
+const LAVENDER = '#E9D5FF'
+const LAVENDER_LIGHT = '#F5EBFF'
+const JET = '#0A0711'           // body text on white backgrounds
 const WHITE = '#FFFFFF'
-const GREY = '#666666'
+const GREY = '#9CA3AF'          // muted text on dark backgrounds
+const HALO_CORE = '#FFFFFF'     // soft white core for radial halos
+const HALO_EDGE = 'rgba(127, 57, 251, 0.15)' // translucent violet edge for halos
 
 const PAGE_WIDTH = 595.28 // A4 portrait in points (72dpi)
 const PAGE_HEIGHT = 841.89
@@ -141,12 +152,38 @@ export async function GET(
       sectionDests.push({ name, pageIdx: currentPageIdx, y: doc.y })
     }
 
-    const drawGradientBanner = (height: number) => {
-      // Real linear gradient — Orchid Purple → Soft Lavender (top to bottom)
+    // drawDarkGradientBanner — full-page-width dark immersive gradient from
+    // near-black (#0A0711) at top to rich royal/indigo-violet (#241445) at
+    // bottom. Adds a soft radial halo overlay (white core → translucent
+    // violet edge) for the "Round Circle Shadows & Glows" signature effect.
+    const drawDarkGradientBanner = (height: number, addHalo: boolean = true) => {
       const gradient = doc.linearGradient(MARGIN, doc.y, MARGIN, doc.y + height)
-      gradient.stop(0, ORCHID_DEEP).stop(0.5, ORCHID).stop(1, LAVENDER)
+      gradient.stop(0, DARK_NEAR_BLACK).stop(0.5, DARK_VIOLET).stop(1, DARK_INDIGO)
       doc.rect(MARGIN, doc.y, CONTENT_WIDTH, height).fill(gradient)
+
+      // Radial halo overlay — soft white core fading to translucent violet
+      // edges. Creates the "glowing tonal shadow" depth effect from the
+      // MassaPro Visual & Design System.
+      if (addHalo) {
+        try {
+          const haloX = MARGIN + CONTENT_WIDTH / 2
+          const haloY = doc.y + height * 0.35
+          const haloR = Math.min(CONTENT_WIDTH * 0.4, height * 0.6)
+          const halo = doc.radialGradient(haloX, haloY, 0, haloX, haloY, haloR)
+          halo.stop(0, 'rgba(255, 255, 255, 0.08)')
+          halo.stop(0.6, 'rgba(127, 57, 251, 0.04)')
+          halo.stop(1, 'rgba(127, 57, 251, 0)')
+          doc.rect(MARGIN, doc.y, CONTENT_WIDTH, height).fill(halo)
+        } catch {
+          // radialGradient not available in some PDFKit builds — skip gracefully
+        }
+      }
       doc.y += height
+    }
+
+    // Legacy alias — kept for any remaining callers; now uses the dark gradient
+    const drawGradientBanner = (height: number) => {
+      drawDarkGradientBanner(height, false)
     }
 
     const drawSectionHeading = (text: string, recordDest: boolean = true) => {
@@ -155,7 +192,7 @@ export async function GET(
       doc.fontSize(16).fillColor(ORCHID).font('Helvetica-Bold')
       doc.text(brandClean(text), MARGIN, y, { width: CONTENT_WIDTH })
       doc.y += 4
-      // Purple underline
+      // Electric violet underline
       doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).strokeColor(ORCHID).lineWidth(1.5).stroke()
       doc.y += 10
       doc.fillColor(JET).font('Helvetica').fontSize(11)
@@ -412,13 +449,12 @@ export async function GET(
     }
 
     // ---- Cover Page ------------------------------------------------------
-    // Layout (per user feedback): MassaPro logo at the TOP of the gradient
-    // banner, with "MassaPro" + "Statement of Work" text BELOW the logo
-    // (not on top of it). When a client logo is provided, it appears on
-    // the RIGHT side of the gradient banner, next to the MassaPro logo.
+    // MassaPro Visual & Design System: full-page dark immersive gradient
+    // from near-black (#0A0711) to rich royal/indigo-violet (#241445),
+    // with a radial halo glow behind the logos.
     doc.y = 60
-    // Gradient banner — taller to fit the logo on top + text below
-    drawGradientBanner(280)
+    // Dark gradient banner — taller to fit the logo on top + text below
+    drawDarkGradientBanner(280, true)
 
     // Logos — MassaPro on the left, client logo on the right when provided
     const logoPath = path.join(process.cwd(), 'public', 'massapro-logo.png')
@@ -467,20 +503,20 @@ export async function GET(
       } catch {}
     }
 
-    // "MassaPro" + "Statement of Work" — BELOW the logo (not on top of it)
+    // "MassaPro" + "Statement of Work" — BELOW the logo, WHITE text on dark
     doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(28)
     doc.text('MassaPro', MARGIN, 200, { width: CONTENT_WIDTH, align: 'center' })
-    doc.fontSize(18).fillColor(WHITE)
+    doc.fontSize(18).fillColor(LAVENDER)
     doc.text('Statement of Work', MARGIN, 235, { width: CONTENT_WIDTH, align: 'center' })
 
-    // Below the gradient banner — project subtitle
+    // Below the gradient banner — project subtitle (on stark white background)
     doc.y += 10
     doc.fillColor(JET).font('Helvetica-Oblique').fontSize(12)
     doc.text(brandClean('Implementation of your MassaPro platform'), MARGIN, doc.y, { width: CONTENT_WIDTH, align: 'center' })
     doc.y += 20
 
     // Cover info table — Soft Lavender label column, white value column,
-    // purple outer border, lavender inner dividers.
+    // electric violet outer border, lavender inner dividers.
     const coverRows: [string, string][] = [
       ['Client', cover.clientName || '<client name>'],
       ['Client Demo', cover.clientDemo || '<demo>'],
@@ -837,27 +873,41 @@ export async function GET(
         footerY,
         { width: CONTENT_WIDTH, align: 'center', lineBreak: false }
       )
-      // Header — MassaPro logo (left) | SOW — project name (center) |
-      // client logo (right) — or Client Demo text when no client logo is set.
+      // Header — dark gradient strip with MassaPro logo (left) | SOW —
+      // project name (center) | client logo (right) — or Client Demo text.
       // Skip on the cover page (page 0) and TOC page — the cover already
-      // has the logos, and the TOC has its own title.
+      // has the dark banner + logos, and the TOC has its own title.
+      // Per the MassaPro Visual & Design System, the header uses a dark
+      // gradient strip (near-black → indigo-violet) with white text.
       if (i > 0 && i !== tocPageIdx) {
         const headerY = 24
         const headerLogoSize = 24
-        // Left — MassaPro logo (when available) — falls back to text
+        const headerStripHeight = 36
+
+        // Dark gradient strip behind the header — near-black → indigo-violet
+        try {
+          const headerGradient = doc.linearGradient(MARGIN, 18, MARGIN, 18 + headerStripHeight)
+          headerGradient.stop(0, DARK_NEAR_BLACK).stop(1, DARK_INDIGO)
+          doc.rect(MARGIN, 18, CONTENT_WIDTH, headerStripHeight).fill(headerGradient)
+        } catch {
+          // fallback — solid dark fill
+          doc.rect(MARGIN, 18, CONTENT_WIDTH, headerStripHeight).fill(DARK_INDIGO)
+        }
+
+        // Left — MassaPro logo (when available) — falls back to white text
         if (fs.existsSync(logoPath)) {
           try {
-            doc.image(logoPath, MARGIN, headerY, { width: headerLogoSize, height: headerLogoSize })
+            doc.image(logoPath, MARGIN + 6, headerY, { width: headerLogoSize, height: headerLogoSize })
           } catch {
-            doc.fontSize(8).fillColor(ORCHID).font('Helvetica-Bold')
-            doc.text('MassaPro', MARGIN, headerY + 8, { width: 100, align: 'left', lineBreak: false })
+            doc.fontSize(8).fillColor(WHITE).font('Helvetica-Bold')
+            doc.text('MassaPro', MARGIN + 6, headerY + 8, { width: 100, align: 'left', lineBreak: false })
           }
         } else {
-          doc.fontSize(8).fillColor(ORCHID).font('Helvetica-Bold')
-          doc.text('MassaPro', MARGIN, headerY + 8, { width: 100, align: 'left', lineBreak: false })
+          doc.fontSize(8).fillColor(WHITE).font('Helvetica-Bold')
+          doc.text('MassaPro', MARGIN + 6, headerY + 8, { width: 100, align: 'left', lineBreak: false })
         }
-        // Center — SOW — project name
-        doc.fillColor(GREY).font('Helvetica').fontSize(8)
+        // Center — SOW — project name (white on dark)
+        doc.fillColor(LAVENDER).font('Helvetica').fontSize(8)
         doc.text(
           'SOW — ' + (cover.projectName || 'Implementation of your MassaPro platform'),
           MARGIN + 110,
@@ -866,7 +916,7 @@ export async function GET(
         )
         // Right — client logo (when set) — preserve aspect ratio, fit within
         // 80×24 (wide logos like 221×74 become ~60×20 instead of a distorted
-        // 24×24 square). Falls back to "Client Demo: <name>" text.
+        // 24×24 square). Falls back to "Client Demo: <name>" white text.
         if (clientLogoBuffer) {
           try {
             const clientDims = getImageDimensions(clientLogoBuffer)
@@ -880,7 +930,7 @@ export async function GET(
               height: clientHeaderFit.height,
             })
           } catch {
-            doc.fillColor(ORCHID).font('Helvetica-Bold').fontSize(8)
+            doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(8)
             doc.text(
               'Client Demo: ' + (cover.clientDemo || '—'),
               PAGE_WIDTH - MARGIN - 200,
@@ -889,7 +939,7 @@ export async function GET(
             )
           }
         } else {
-          doc.fillColor(ORCHID).font('Helvetica-Bold').fontSize(8)
+          doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(8)
           doc.text(
             'Client Demo: ' + (cover.clientDemo || '—'),
             PAGE_WIDTH - MARGIN - 200,
@@ -897,9 +947,9 @@ export async function GET(
             { width: 200, align: 'right', lineBreak: false, ellipsis: true }
           )
         }
-        // Subtle divider line under the header
-        doc.moveTo(MARGIN, headerY + headerLogoSize + 4).lineTo(PAGE_WIDTH - MARGIN, headerY + headerLogoSize + 4)
-           .strokeColor(LAVENDER).lineWidth(0.5).stroke()
+        // Subtle electric violet divider line under the header
+        doc.moveTo(MARGIN, 18 + 36).lineTo(PAGE_WIDTH - MARGIN, 18 + 36)
+           .strokeColor(ORCHID).lineWidth(0.5).stroke()
       }
 
       // Restore state
