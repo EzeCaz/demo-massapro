@@ -165,7 +165,13 @@ export async function GET(
     const drawBullet = (text: string, level: number = 0) => {
       const indent = 20 + level * 20
       const colWidth = CONTENT_WIDTH - indent
-      const bullet = level === 0 ? '●' : '○'
+      // IMPORTANT: use WinAnsi-compatible bullet characters only.
+      // PDFKit's built-in Helvetica font uses WinAnsiEncoding, which
+      // does NOT include U+25CF (●) or U+25CB (○) — those render as
+      // garbage (% symbol) in the PDF. The standard WinAnsi bullet is
+      // U+2022 (•) which renders correctly. For sub-bullets we use
+      // the en-dash (–, U+2013) which is also in WinAnsi.
+      const bullet = level === 0 ? '\u2022' : '\u2013'
       // CRITICAL: both the bullet text() call and the body text() call
       // MUST use the SAME width. If the bullet is rendered with a small
       // width (e.g. 14) and `continued: true`, PDFKit constrains ALL
