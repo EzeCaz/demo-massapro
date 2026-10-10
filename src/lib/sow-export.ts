@@ -67,6 +67,7 @@ import {
   DEFAULT_MILESTONES,
   type MilestoneRow,
 } from '@/lib/sow-data'
+import { getImageDimensions, fitImage } from '@/lib/image-dimensions'
 
 export interface SOWCoverInfo {
   clientName: string
@@ -229,6 +230,13 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     return 'png' as any
   })()
 
+  // Detect the client logo's natural pixel dimensions so we can preserve its
+  // aspect ratio. Without this, a wide logo (e.g., 221×74) gets forced into a
+  // 180×180 square and looks distorted. We fit it within a 180×180 box.
+  const clientLogoDims = clientLogoBuffer ? getImageDimensions(clientLogoBuffer) : null
+  const clientLogoCoverFit = fitImage(clientLogoDims, 180, 180)
+  const clientLogoHeaderFit = fitImage(clientLogoDims, 60, 60)
+
   // Two-column logo row — MassaPro logo on the LEFT, client logo on the RIGHT.
   // Both sit in the darkest band of the gradient. When no client logo is set,
   // the MassaPro logo is centered instead.
@@ -263,7 +271,11 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
                     children: [
                       new Paragraph({
                         alignment: AlignmentType.CENTER,
-                        children: [new ImageRun({ data: clientLogoBuffer, transformation: { width: 180, height: 180 }, type: clientLogoType } as any)],
+                        children: [new ImageRun({
+                          data: clientLogoBuffer,
+                          transformation: { width: clientLogoCoverFit.width, height: clientLogoCoverFit.height },
+                          type: clientLogoType,
+                        } as any)],
                       }),
                     ],
                   }),
@@ -864,7 +876,11 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
                         children: clientLogoBuffer
                           ? [new Paragraph({
                               alignment: AlignmentType.RIGHT,
-                              children: [new ImageRun({ data: clientLogoBuffer, transformation: { width: 60, height: 60 }, type: clientLogoType } as any)],
+                              children: [new ImageRun({
+                                data: clientLogoBuffer,
+                                transformation: { width: clientLogoHeaderFit.width, height: clientLogoHeaderFit.height },
+                                type: clientLogoType,
+                              } as any)],
                             })]
                           : [new Paragraph({
                               alignment: AlignmentType.RIGHT,

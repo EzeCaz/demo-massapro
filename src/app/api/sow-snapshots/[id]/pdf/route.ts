@@ -19,6 +19,7 @@ import {
   type MilestoneRow,
 } from '@/lib/sow-data'
 import type { CustomService } from '@/lib/sow-export'
+import { getImageDimensions, fitImage } from '@/lib/image-dimensions'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -393,13 +394,29 @@ export async function GET(
     })()
 
     // Draw MassaPro logo (left side or centered if no client logo)
+    // The MassaPro logo is square, so square rendering is fine. The client
+    // logo, however, may be any aspect ratio (e.g., 221×74). We detect its
+    // natural dimensions and fit it within a max box to preserve the aspect
+    // ratio instead of forcing it into a square.
     if (hasMassaproLogo) {
       try {
         if (clientLogoBuffer) {
-          // MassaPro on the left, client logo on the right — both in the banner
+          // MassaPro on the left — square is fine for this logo
           doc.image(logoPath, MARGIN + 60, 80, { width: 80, height: 80 })
+          // Client logo on the right — preserve aspect ratio, fit within 140×80
           try {
-            doc.image(clientLogoBuffer, PAGE_WIDTH - MARGIN - 140, 80, { width: 80, height: 80 })
+            const clientDims = getImageDimensions(clientLogoBuffer)
+            const clientFit = fitImage(clientDims, 140, 80)
+            // Center vertically within the 80-height banner area
+            const clientLogoY = 80 + (80 - clientFit.height) / 2
+            // Center horizontally within the right half of the page
+            const rightHalfStart = PAGE_WIDTH / 2
+            const rightHalfWidth = PAGE_WIDTH / 2 - MARGIN
+            const clientLogoX = rightHalfStart + (rightHalfWidth - clientFit.width) / 2
+            doc.image(clientLogoBuffer, clientLogoX, clientLogoY, {
+              width: clientFit.width,
+              height: clientFit.height,
+            })
           } catch {}
         } else {
           // MassaPro centered
@@ -677,10 +694,21 @@ export async function GET(
           headerY + 8,
           { width: CONTENT_WIDTH - 220, align: 'center', lineBreak: false, ellipsis: true }
         )
-        // Right — client logo (when set) — falls back to Client Demo text
+        // Right — client logo (when set) — preserve aspect ratio, fit within
+        // 80×24 (wide logos like 221×74 become ~60×20 instead of a distorted
+        // 24×24 square). Falls back to "Client Demo: <name>" text.
         if (clientLogoBuffer) {
           try {
-            doc.image(clientLogoBuffer, PAGE_WIDTH - MARGIN - headerLogoSize, headerY, { width: headerLogoSize, height: headerLogoSize })
+            const clientDims = getImageDimensions(clientLogoBuffer)
+            const clientHeaderFit = fitImage(clientDims, 80, 24)
+            // Right-align: the logo's right edge sits at PAGE_WIDTH - MARGIN
+            const clientHeaderX = PAGE_WIDTH - MARGIN - clientHeaderFit.width
+            // Vertically center within the 24pt header band
+            const clientHeaderY = headerY + (headerLogoSize - clientHeaderFit.height) / 2
+            doc.image(clientLogoBuffer, clientHeaderX, clientHeaderY, {
+              width: clientHeaderFit.width,
+              height: clientHeaderFit.height,
+            })
           } catch {
             doc.fillColor(ORCHID).font('Helvetica-Bold').fontSize(8)
             doc.text(
