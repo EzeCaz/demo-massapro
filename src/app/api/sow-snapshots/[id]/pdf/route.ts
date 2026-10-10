@@ -121,6 +121,26 @@ export async function GET(
     // ---- Helpers ---------------------------------------------------------
     const ensureXMargin = () => { doc.x = MARGIN }
 
+    // Track section destinations for the Table of Contents internal links.
+    // Each entry records the page index (0-based within the buffered range)
+    // and the y coordinate of the section heading, so we can add clickable
+    // GoTo link annotations on the TOC page after all content is rendered.
+    const sectionDests: { name: string; pageIdx: number; y: number }[] = []
+    let currentPageIdx = 0  // cover page = 0
+    let tocPageIdx = -1      // set when we create the TOC page
+
+    // trackedAddPage — wraps doc.addPage() to keep currentPageIdx in sync
+    const trackedAddPage = () => {
+      doc.addPage()
+      currentPageIdx++
+    }
+
+    // recordSection — call after drawing a section heading to record its
+    // destination for the TOC links
+    const recordSection = (name: string) => {
+      sectionDests.push({ name, pageIdx: currentPageIdx, y: doc.y })
+    }
+
     const drawGradientBanner = (height: number) => {
       // Real linear gradient — Orchid Purple → Soft Lavender (top to bottom)
       const gradient = doc.linearGradient(MARGIN, doc.y, MARGIN, doc.y + height)
@@ -129,7 +149,7 @@ export async function GET(
       doc.y += height
     }
 
-    const drawSectionHeading = (text: string) => {
+    const drawSectionHeading = (text: string, recordDest: boolean = true) => {
       ensureXMargin()
       const y = doc.y
       doc.fontSize(16).fillColor(ORCHID).font('Helvetica-Bold')
@@ -139,6 +159,10 @@ export async function GET(
       doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).strokeColor(ORCHID).lineWidth(1.5).stroke()
       doc.y += 10
       doc.fillColor(JET).font('Helvetica').fontSize(11)
+      // Record this section heading as a TOC link destination
+      if (recordDest) {
+        recordSection(text)
+      }
     }
 
     const drawSubHeading = (text: string) => {
@@ -227,7 +251,7 @@ export async function GET(
 
       // Make sure the header + at least one row fit; otherwise start a new page
       if (doc.y + rowHeight * 2 > TABLE_BOTTOM_LIMIT) {
-        doc.addPage()
+        trackedAddPage()
       }
       drawHeaderRow()
 
@@ -235,7 +259,7 @@ export async function GET(
       rows.forEach((row, ri) => {
         // Page break if the row won't fit — re-draw the header on the new page
         if (doc.y + rowHeight > TABLE_BOTTOM_LIMIT) {
-          doc.addPage()
+          trackedAddPage()
           drawHeaderRow()
         }
 
@@ -312,7 +336,7 @@ export async function GET(
       }
 
       if (doc.y + minRowHeight * 2 > TABLE_BOTTOM_LIMIT) {
-        doc.addPage()
+        trackedAddPage()
       }
       drawHeaderRow()
 
@@ -338,7 +362,7 @@ export async function GET(
         const rowH = Math.max(minRowHeight, Math.max(...cellHeights) + cellPadY * 2)
 
         if (doc.y + rowH > TABLE_BOTTOM_LIMIT) {
-          doc.addPage()
+          trackedAddPage()
           drawHeaderRow()
         }
 
@@ -471,7 +495,7 @@ export async function GET(
       [35, 65]
     )
 
-    doc.addPage()
+    trackedAddPage()
 
     // ---- Welcome page ----------------------------------------------------
     doc.y = 80
@@ -487,7 +511,15 @@ export async function GET(
     drawBody(WELCOME_PARAGRAPHS.closing, { italic: true })
     drawBody(WELCOME_PARAGRAPHS.retention, { italic: true })
 
-    doc.addPage()
+    // ---- Table of Contents page ------------------------------------------
+    // Insert a dedicated TOC page after the Welcome page. We don't draw
+    // the TOC content yet — we need to wait until all sections are
+    // rendered so we know their page numbers. The TOC content + link
+    // annotations are drawn after all content, before the header/footer loop.
+    trackedAddPage()
+    tocPageIdx = currentPageIdx
+
+    trackedAddPage()
 
     // ---- Project Overview + Deliverables ---------------------------------
     drawSectionHeading('Statement of Work')
@@ -523,7 +555,7 @@ export async function GET(
         doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).strokeColor(ORCHID).lineWidth(1).stroke()
         doc.y += 10
         if (doc.y > PAGE_HEIGHT - 200) {
-          doc.addPage()
+          trackedAddPage()
         }
       }
       firstService = false
@@ -565,8 +597,30 @@ export async function GET(
       }
     }
 
+    // ---- Phase 2 — Integration -------------------------------------------
+    // After all Phase 1 services, add the Phase 2 Integration section.
+    // This describes the integration agreement between MassaPro and the
+    // client. It flows naturally after the last service's requirements.
+    doc.y += 20
+    if (doc.y > PAGE_HEIGHT - 200) {
+      trackedAddPage()
+    }
+    // Purple separator rule between Phase 1 and Phase 2
+    doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).strokeColor(ORCHID).lineWidth(1).stroke()
+    doc.y += 10
+    drawSectionHeading('Scope')
+    drawSubHeading('Phase 2')
+    doc.fontSize(16).fillColor(ORCHID).font('Helvetica-Bold')
+    doc.text('Integration', MARGIN, doc.y, { width: CONTENT_WIDTH })
+    doc.y += 6
+    doc.fillColor(JET).font('Helvetica').fontSize(11)
+    const clientName = cover.clientName || '<client name>'
+    drawBody(`${clientName} require MassaProAI to integrate with <product>.`)
+    drawBody('A full specification detailing the setup of the integration will be agreed between both parties before any development work begins.')
+    drawBody(`Once the specification is agreed, MassaProAI will assist ${clientName} with completing the integration.`)
+
     // ---- Configuration Tracker --------------------------------------------
-    doc.addPage()
+    trackedAddPage()
     drawSectionHeading('Statement of Work')
     drawSubHeading('Configuration Tracker')
     drawBody(
@@ -621,7 +675,7 @@ export async function GET(
     )
 
     // ---- Infrastructure & Access Requirements ----------------------------
-    doc.addPage()
+    trackedAddPage()
     drawSectionHeading('Statement of Work')
     drawSubHeading('Requirements')
     drawSubHeading('Infrastructure & Access Requirements')
@@ -632,7 +686,7 @@ export async function GET(
     INFRA_REQUIREMENTS.internet.forEach((b) => drawBullet(brandClean(b), 0))
 
     // ---- Support ---------------------------------------------------------
-    doc.addPage()
+    trackedAddPage()
     drawSectionHeading('Statement of Work')
     drawSubHeading('Support')
     drawSubHeading(SUPPORT_SECTIONS.intro)
@@ -644,7 +698,7 @@ export async function GET(
     SUPPORT_SECTIONS.ticketTemplate.forEach((line) => drawBody(line, { indent: 20, size: 10 }))
 
     // ---- Project Milestones ----------------------------------------------
-    doc.addPage()
+    trackedAddPage()
     drawSectionHeading('Project Milestones')
     drawSubHeading('Phase 1')
     drawColoredTable(
@@ -655,7 +709,13 @@ export async function GET(
     drawBody('Project progress will be tracked in the shared Project Tracker document.', { italic: true })
 
     // ---- Signatures ------------------------------------------------------
-    doc.addPage()
+    // No page break — Signatures flow naturally after Milestones so they
+    // appear at the bottom of the current page (e.g., page 18) instead
+    // of being forced to the top of a new page.
+    doc.y += 20
+    if (doc.y > PAGE_HEIGHT - 200) {
+      trackedAddPage()
+    }
     drawSectionHeading('Signatures')
     drawBody(
       'By signing below, the authorized representatives of each party accept the scope, deliverables, configuration items, requirements and milestones defined in this Statement of Work.'
@@ -668,6 +728,93 @@ export async function GET(
       ],
       [35, 25, 25, 15]
     )
+
+    // ---- Table of Contents — render content + clickable links ------------
+    // Now that all sections have been rendered and we know their page
+    // numbers, switch to the TOC page (reserved earlier) and draw the
+    // section entries with page numbers and internal link annotations.
+    if (tocPageIdx >= 0 && sectionDests.length > 0) {
+      doc.switchToPage(tocPageIdx)
+      doc.y = 80
+
+      // TOC title
+      doc.fillColor(ORCHID).font('Helvetica-Bold').fontSize(20)
+      doc.text('Table of Contents', MARGIN, doc.y, { width: CONTENT_WIDTH, align: 'center' })
+      doc.y += 8
+      doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).strokeColor(ORCHID).lineWidth(1.5).stroke()
+      doc.y += 20
+      doc.fillColor(JET).font('Helvetica').fontSize(11)
+
+      // Draw each section entry with dotted leader and page number.
+      // We record the y position of each entry for the link annotation.
+      const tocEntries: { dest: { name: string; pageIdx: number; y: number }; entryY: number }[] = []
+      for (const dest of sectionDests) {
+        const entryY = doc.y
+        // Section name on the left
+        doc.fontSize(11).fillColor(JET).font('Helvetica')
+        doc.text(dest.name, MARGIN, entryY, { width: 350, align: 'left', lineBreak: false })
+
+        // Page number on the right (1-based display)
+        const displayPage = dest.pageIdx + 1
+        doc.text(String(displayPage), PAGE_WIDTH - MARGIN - 50, entryY, { width: 50, align: 'right', lineBreak: false })
+
+        // Dotted leader between name and page number
+        const nameWidth = doc.widthOfString(dest.name, { font: 'Helvetica', fontSize: 11 })
+        const pageX = PAGE_WIDTH - MARGIN - 50
+        const dotStartX = MARGIN + nameWidth + 8
+        const dotEndX = pageX - 8
+        if (dotEndX > dotStartX) {
+          doc.dash(1, { space: 3 })
+          doc.moveTo(dotStartX, entryY + 6).lineTo(dotEndX, entryY + 6)
+             .strokeColor(GREY).lineWidth(0.5).stroke()
+          doc.undash()
+        }
+
+        tocEntries.push({ dest, entryY })
+        doc.y = entryY + 20
+      }
+
+      // Add clickable internal link annotations for each TOC entry.
+      // Each link annotation creates a GoTo action that navigates to the
+      // destination page at the section heading's y position.
+      // First, collect all destination page dictionary references.
+      const destPageRefs = new Map<number, any>()
+      for (const entry of tocEntries) {
+        if (!destPageRefs.has(entry.dest.pageIdx)) {
+          doc.switchToPage(entry.dest.pageIdx)
+          destPageRefs.set(entry.dest.pageIdx, doc.page.dictionary)
+        }
+      }
+
+      // Switch to the TOC page and add link annotations
+      doc.switchToPage(tocPageIdx)
+      for (const entry of tocEntries) {
+        const destPageRef = destPageRefs.get(entry.dest.pageIdx)
+        if (!destPageRef) continue
+
+        // Create the GoTo action as an indirect object
+        const actionRef = doc.ref({
+          Type: 'Action',
+          S: 'GoTo',
+          D: [destPageRef, 'XYZ', MARGIN, entry.dest.y, null],
+        })
+
+        // Create the link annotation as an indirect object
+        const linkRef = doc.ref({
+          Type: 'Annot',
+          Subtype: 'Link',
+          Rect: [MARGIN, entry.entryY, PAGE_WIDTH - MARGIN, entry.entryY + 20],
+          Border: [0, 0, 0],
+          A: actionRef,
+        })
+
+        // Add the annotation to the TOC page's Annots array
+        if (!doc.page.data.Annots) {
+          doc.page.data.Annots = []
+        }
+        doc.page.data.Annots.push(linkRef)
+      }
+    }
 
     // ---- Headers + footers on every page (bufferPages) -------------------
     const pageCount = doc.bufferedPageRange().count
@@ -693,8 +840,9 @@ export async function GET(
       )
       // Header — MassaPro logo (left) | SOW — project name (center) |
       // client logo (right) — or Client Demo text when no client logo is set.
-      // Skip on the cover page (page 0) — the cover already has the logos.
-      if (i > 0) {
+      // Skip on the cover page (page 0) and TOC page — the cover already
+      // has the logos, and the TOC has its own title.
+      if (i > 0 && i !== tocPageIdx) {
         const headerY = 24
         const headerLogoSize = 24
         // Left — MassaPro logo (when available) — falls back to text

@@ -49,6 +49,8 @@ import {
   PageBorderDisplay,
   PageBorderOffsetFrom,
   PageBorderZOrder,
+  Bookmark,
+  InternalHyperlink,
 } from 'docx'
 import { saveAs } from 'file-saver'
 import {
@@ -439,10 +441,65 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
   ]
 
   // =========================================================================
+  // SECTION 2.5 — Table of Contents (page 3)
+  // =========================================================================
+  // A dedicated TOC page with clickable InternalHyperlink entries that
+  // navigate to each section's Bookmark. The bookmark IDs must match the
+  // ones passed to sectionHeading() above and below.
+  const tocChildren: (Paragraph | Table)[] = [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 200, after: 120 },
+      children: [
+        new TextRun({ text: 'Table of Contents', bold: true, size: 36, color: ORCHID, font: 'Calibri' }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { before: 0, after: 200 },
+      border: { bottom: { color: ORCHID, space: 6, style: BorderStyle.SINGLE, size: 12 } },
+      children: [],
+    }),
+  ]
+
+  // Helper — one TOC entry with an InternalHyperlink to a bookmark
+  const tocEntry = (label: string, anchor: string): Paragraph => {
+    return new Paragraph({
+      spacing: { before: 100, after: 100 },
+      children: [
+        new InternalHyperlink({
+          anchor,
+          children: [
+            new TextRun({
+              text: label,
+              size: 24,
+              color: ORCHID,
+              font: 'Calibri',
+              underline: { type: 'single', color: ORCHID } as any,
+            }),
+          ],
+        } as any),
+      ],
+    })
+  }
+
+  // TOC entries — each links to the bookmark on the corresponding section heading
+  tocChildren.push(
+    tocEntry('Statement of Work — Project Overview', 'sow-overview'),
+    tocEntry('Scope — Phase 1', 'scope'),
+    tocEntry('Scope — Phase 2 Integration', 'scope-phase2'),
+    tocEntry('Configuration Tracker', 'tracker'),
+    tocEntry('Requirements', 'requirements'),
+    tocEntry('Support', 'support'),
+    tocEntry('Project Milestones', 'milestones'),
+    tocEntry('Signatures', 'signatures'),
+    new Paragraph({ children: [new PageBreak()] }),
+  )
+
+  // =========================================================================
   // SECTION 3 — Project Overview + Deliverables
   // =========================================================================
   const overviewChildren: (Paragraph | Table)[] = [
-    sectionHeading('Statement of Work'),
+    sectionHeading('Statement of Work', 'sow-overview'),
     subSectionHeading('Project Overview'),
     bodyParagraph(
       brandClean(
@@ -502,7 +559,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     }
     // "Scope / Phase 1 / <Service Name>" header block — compact (no page break)
     scopeChildren.push(
-      sectionHeading('Scope'),
+      sectionHeading('Scope', 'scope'),
       subSectionHeading('Phase 1'),
       new Paragraph({
         spacing: { before: 40, after: 160 },
@@ -566,12 +623,40 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     }
   }
 
+  // ---- Phase 2 — Integration -------------------------------------------
+  // After all Phase 1 services, add the Phase 2 Integration section.
+  const clientNameStr = cover.clientName || '<client name>'
+  scopeChildren.push(
+    new Paragraph({
+      spacing: { before: 360, after: 200 },
+      border: { bottom: { color: ORCHID, space: 8, style: BorderStyle.SINGLE, size: 6 } },
+      children: [],
+    }),
+    sectionHeading('Scope', 'scope-phase2'),
+    subSectionHeading('Phase 2'),
+    new Paragraph({
+      spacing: { before: 40, after: 160 },
+      children: [
+        new TextRun({
+          text: 'Integration',
+          bold: true,
+          size: 28,
+          color: ORCHID,
+          font: 'Calibri',
+        }),
+      ],
+    }),
+    bodyParagraph(`${clientNameStr} require MassaProAI to integrate with <product>.`),
+    bodyParagraph('A full specification detailing the setup of the integration will be agreed between both parties before any development work begins.'),
+    bodyParagraph(`Once the specification is agreed, MassaProAI will assist ${clientNameStr} with completing the integration.`),
+  )
+
   // =========================================================================
   // SECTION 5 — Configuration Tracker (status / owner / due / notes)
   // =========================================================================
   const trackerChildren: (Paragraph | Table)[] = [
     new Paragraph({ children: [new PageBreak()] }),
-    sectionHeading('Statement of Work'),
+    sectionHeading('Statement of Work', 'tracker'),
     subSectionHeading('Configuration Tracker'),
     bodyParagraph(
       'The following tracker shows the live status of every configuration item across all selected services. Use this table to track progress against owners, due dates and notes during the project delivery.',
@@ -668,7 +753,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
   // =========================================================================
   const infraChildren: (Paragraph | Table)[] = [
     new Paragraph({ children: [new PageBreak()] }),
-    sectionHeading('Statement of Work'),
+    sectionHeading('Statement of Work', 'requirements'),
     subSectionHeading('Requirements'),
     bodyParagraph(
       'The following infrastructure, hardware and connectivity requirements must be met by the Client prior to and during the project.',
@@ -687,7 +772,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
   // =========================================================================
   const supportChildren: (Paragraph | Table)[] = [
     new Paragraph({ children: [new PageBreak()] }),
-    sectionHeading('Statement of Work'),
+    sectionHeading('Statement of Work', 'support'),
     subSectionHeading('Support'),
     subSectionHeading(SUPPORT_SECTIONS.intro),
     ...SUPPORT_SECTIONS.supportService.map((b) => bodyParagraph(brandClean(b))),
@@ -709,7 +794,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
   const milestoneRows: MilestoneRow[] = milestones && milestones.length > 0 ? milestones : DEFAULT_MILESTONES
   const milestoneChildren: (Paragraph | Table)[] = [
     new Paragraph({ children: [new PageBreak()] }),
-    sectionHeading('Project Milestones'),
+    sectionHeading('Project Milestones', 'milestones'),
     subSectionHeading('Phase 1'),
     new Paragraph({
       alignment: AlignmentType.CENTER,
@@ -748,8 +833,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
   // SECTION 9 — Signatures (extension to the Connex template)
   // =========================================================================
   const signatureChildren: (Paragraph | Table)[] = [
-    new Paragraph({ children: [new PageBreak()] }),
-    sectionHeading('Signatures'),
+    sectionHeading('Signatures', 'signatures'),
     bodyParagraph(
       'By signing below, the authorized representatives of each party accept the scope, deliverables, configuration items, requirements and milestones defined in this Statement of Work.',
       { after: 320 }
@@ -927,6 +1011,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
         children: [
           ...coverChildren,
           ...welcomeChildren,
+          ...tocChildren,
           ...overviewChildren,
           ...scopeChildren,
           ...trackerChildren,
@@ -947,22 +1032,24 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
 // ---------------------------------------------------------------------------
 
 // Top-level section heading (e.g., "Statement of Work", "Scope") — purple,
-// underlined, large.
-function sectionHeading(text: string): Paragraph {
+// underlined, large. When bookmarkId is provided, wraps the heading text in
+// a Bookmark so the Table of Contents can link to it via InternalHyperlink.
+function sectionHeading(text: string, bookmarkId?: string): Paragraph {
+  const headingRun = new TextRun({
+    text,
+    bold: true,
+    size: 28, // 14pt
+    color: '9333EA',
+    font: 'Calibri',
+  })
   return new Paragraph({
     spacing: { before: 320, after: 160 },
     border: {
       bottom: { color: '9333EA', space: 6, style: BorderStyle.SINGLE, size: 12 },
     },
-    children: [
-      new TextRun({
-        text,
-        bold: true,
-        size: 28, // 14pt
-        color: '9333EA',
-        font: 'Calibri',
-      }),
-    ],
+    children: bookmarkId
+      ? [new Bookmark({ id: bookmarkId, children: [headingRun] })]
+      : [headingRun],
   })
 }
 
