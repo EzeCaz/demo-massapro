@@ -892,39 +892,22 @@ export async function GET(
       drawTocPageLink('Signatures', signaturesDest)
 
       // ---- Add clickable link annotations for EVERY TOC line ----
+      // Uses PDFKit's built-in doc.link(x, y, w, h, pageNumber) method.
+      // When pageNumber is an integer, PDFKit creates a GoTo action to
+      // that page (0-indexed). This is the correct way to add internal
+      // links — the manual doc.ref() approach didn't capitalize option
+      // keys properly, so PDF readers didn't recognize the annotations.
       if (tocLinks.length > 0) {
-        // Collect destination page dictionary references
-        const destPageRefs = new Map<number, any>()
-        for (const link of tocLinks) {
-          if (!destPageRefs.has(link.dest.pageIdx)) {
-            doc.switchToPage(link.dest.pageIdx)
-            destPageRefs.set(link.dest.pageIdx, doc.page.dictionary)
-          }
-        }
-
-        // Switch to the TOC page and add link annotations
         doc.switchToPage(tocPageIdx)
         for (const link of tocLinks) {
-          const destPageRef = destPageRefs.get(link.dest.pageIdx)
-          if (!destPageRef) continue
-
-          const actionRef = doc.ref({
-            Type: 'Action',
-            S: 'GoTo',
-            D: [destPageRef, 'XYZ', MARGIN, link.dest.y, null],
-          })
-          actionRef.end()
-
-          const linkRef = doc.ref({
-            Type: 'Annot',
-            Subtype: 'Link',
-            Rect: [MARGIN, link.entryY, PAGE_WIDTH - MARGIN, link.entryY + link.entryHeight],
-            Border: [0, 0, 0],
-            A: actionRef,
-          })
-          linkRef.end()
-
-          doc.page.annotations.push(linkRef)
+          // doc.link(x, y, width, height, pageNumber) — pageNumber is 0-indexed
+          doc.link(
+            MARGIN,
+            link.entryY,
+            CONTENT_WIDTH,
+            link.entryHeight,
+            link.dest.pageIdx  // 0-indexed page number → GoTo action
+          )
         }
       }
     }
