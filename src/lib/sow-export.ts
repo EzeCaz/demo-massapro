@@ -461,7 +461,52 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     }),
   ]
 
-  // Helper — one TOC entry with an InternalHyperlink to a bookmark
+  // Helper — a clickable TOC bullet entry (with InternalHyperlink to a bookmark)
+  const tocBulletLink = (label: string, anchor: string): Paragraph => {
+    return new Paragraph({
+      spacing: { before: 40, after: 40 },
+      indent: { left: 480, hanging: 240 },
+      children: [
+        new TextRun({ text: '\u2022  ', size: 22, color: ORCHID, font: 'Calibri', bold: true }),
+        new InternalHyperlink({
+          anchor,
+          children: [
+            new TextRun({
+              text: label,
+              size: 22,
+              color: ORCHID,
+              font: 'Calibri',
+              underline: { type: 'single', color: ORCHID } as any,
+            }),
+          ],
+        } as any),
+      ],
+    })
+  }
+
+  // Helper — a TOC phase heading (bold, also clickable via bookmark)
+  const tocPhaseHeadingLink = (label: string, anchor: string): Paragraph => {
+    return new Paragraph({
+      spacing: { before: 240, after: 120 },
+      children: [
+        new InternalHyperlink({
+          anchor,
+          children: [
+            new TextRun({
+              text: label,
+              bold: true,
+              size: 28,
+              color: ORCHID,
+              font: 'Calibri',
+              underline: { type: 'single', color: ORCHID } as any,
+            }),
+          ],
+        } as any),
+      ],
+    })
+  }
+
+  // Helper — one TOC entry (non-bullet) with an InternalHyperlink to a bookmark
   const tocEntry = (label: string, anchor: string): Paragraph => {
     return new Paragraph({
       spacing: { before: 100, after: 100 },
@@ -482,43 +527,25 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     })
   }
 
-  // Helper — a non-link TOC bullet entry (for service lists)
-  const tocBullet = (label: string): Paragraph => {
-    return new Paragraph({
-      spacing: { before: 40, after: 40 },
-      indent: { left: 480, hanging: 240 },
-      children: [
-        new TextRun({ text: '\u2022  ', size: 22, color: ORCHID, font: 'Calibri', bold: true }),
-        new TextRun({ text: label, size: 22, color: JET, font: 'Calibri' }),
-      ],
-    })
-  }
-
-  // Helper — a TOC phase heading (bold, non-link)
-  const tocPhaseHeading = (label: string): Paragraph => {
-    return new Paragraph({
-      spacing: { before: 240, after: 120 },
-      children: [
-        new TextRun({ text: label, bold: true, size: 28, color: ORCHID, font: 'Calibri' }),
-      ],
-    })
-  }
-
-  // Build the TOC content per the user's spec: Phase 1 service bullets,
-  // Phase 2 bullets, then links to Milestones and Signatures.
-  tocChildren.push(tocPhaseHeading('Phase 1'))
-  // Phase 1 service bullets — same list as the Deliverables section
+  // Build the TOC content — ALL items are clickable links.
+  // Phase 1: heading (link to 'scope') + one bullet per service (link to 'svc-N')
+  // Phase 2: heading (link to 'scope-phase2') + 4 bullets (link to 'scope-phase2')
+  // Project Milestones (link to 'milestones')
+  // Signatures (link to 'signatures')
+  tocChildren.push(tocPhaseHeadingLink('Phase 1', 'scope'))
   if (allServices.length === 0) {
-    tocBullet('No services selected.')
+    tocChildren.push(tocBulletLink('No services selected.', 'scope'))
   } else {
-    allServices.forEach((svc) => tocBullet(`Setup and configuration of ${svc.name}`))
+    allServices.forEach((svc, i) => {
+      tocChildren.push(tocBulletLink(`Setup and configuration of ${svc.name}`, `svc-${i + 1}`))
+    })
   }
 
-  tocChildren.push(tocPhaseHeading('Phase 2'))
-  tocBullet('Setup and configuration of Integration')
-  tocBullet('Setup and configuration of Training & Handover')
-  tocBullet('Remote training with Technical Services Engineer')
-  tocBullet('Further dedicated Technical Services Engineer support for full Go-Live')
+  tocChildren.push(tocPhaseHeadingLink('Phase 2', 'scope-phase2'))
+  tocChildren.push(tocBulletLink('Setup and configuration of Integration', 'scope-phase2'))
+  tocChildren.push(tocBulletLink('Setup and configuration of Training & Handover', 'scope-phase2'))
+  tocChildren.push(tocBulletLink('Remote training with Technical Services Engineer', 'scope-phase2'))
+  tocChildren.push(tocBulletLink('Further dedicated Technical Services Engineer support for full Go-Live', 'scope-phase2'))
 
   // Final two linked entries
   tocChildren.push(
@@ -590,18 +617,26 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
       )
     }
     // "Scope / Phase 1 / <Service Name>" header block — compact (no page break)
+    // Each service heading gets a unique bookmark so the TOC entries can link
+    // directly to the corresponding service section.
+    const svcBookmarkId = `svc-${serviceIndex}`
     scopeChildren.push(
       sectionHeading('Scope', 'scope'),
       subSectionHeading('Phase 1'),
       new Paragraph({
         spacing: { before: 40, after: 160 },
         children: [
-          new TextRun({
-            text: brandClean(svc.name),
-            bold: true,
-            size: 28, // 14pt — slightly smaller than before
-            color: ORCHID,
-            font: 'Calibri',
+          new Bookmark({
+            id: svcBookmarkId,
+            children: [
+              new TextRun({
+                text: brandClean(svc.name),
+                bold: true,
+                size: 28, // 14pt — slightly smaller than before
+                color: ORCHID,
+                font: 'Calibri',
+              }),
+            ],
           }),
         ],
       }),
