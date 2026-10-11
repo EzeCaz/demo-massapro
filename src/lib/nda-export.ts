@@ -8,7 +8,7 @@ import {
   Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow,
   TableCell, WidthType, BorderStyle, ShadingType, PageOrientation,
   Header, Footer, PageNumber, PageBreak, Bookmark, InternalHyperlink,
-  LineRuleType,
+  LineRuleType, ImageRun,
 } from 'docx'
 import { saveAs } from 'file-saver'
 import {

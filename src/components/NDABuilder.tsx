@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useLanguage } from '@/hooks/useLanguage'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,19 +21,19 @@ const DARK_INDIGO = '#241445'
 const STORAGE_KEY = 'massapro-nda-state-v1'
 const MASSAPRO_LOGO_URL = '/massapro-logo.png'
 
-export default function NDABuilder({ snapshotId }: { snapshotId?: string } = {}) {
-  const { t } = useLanguage()
+export default function NDABuilder({ snapshotId: initialSnapshotId }: { snapshotId?: string } = {}) {
   const [cover, setCover] = useState<NDACoverInfo>(DEFAULT_NDA_COVER)
   const [hydrated, setHydrated] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [activeSnapshotId, setActiveSnapshotId] = useState<string | undefined>(initialSnapshotId)
 
   // Hydrate from localStorage or platform snapshot
   useEffect(() => {
     let cancelled = false
     async function hydrate() {
-      if (snapshotId) {
+      if (initialSnapshotId) {
         try {
-          const res = await fetch(`/api/nda-snapshots/${snapshotId}`)
+          const res = await fetch(`/api/nda-snapshots/${initialSnapshotId}`)
           if (!res.ok) throw new Error('Failed')
           const data = await res.json()
           if (cancelled) return
@@ -55,15 +54,15 @@ export default function NDABuilder({ snapshotId }: { snapshotId?: string } = {})
     }
     hydrate()
     return () => { cancelled = true }
-  }, [snapshotId])
+  }, [initialSnapshotId])
 
   // Persist to localStorage on changes (only when not editing a snapshot)
   useEffect(() => {
-    if (!hydrated || snapshotId) return
+    if (!hydrated || activeSnapshotId) return
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cover))
     } catch {}
-  }, [cover, hydrated, snapshotId])
+  }, [cover, hydrated, activeSnapshotId])
 
   const update = useCallback((field: keyof NDACoverInfo, value: any) => {
     setCover((prev) => ({ ...prev, [field]: value }))
@@ -88,28 +87,43 @@ export default function NDABuilder({ snapshotId }: { snapshotId?: string } = {})
     }))
   }
 
-  // Save to platform
-  const saveToPlatform = useCallback(async () => {
-    if (!snapshotId) return
+  // Save to platform — creates a new snapshot if none exists yet, otherwise
+  // updates the existing one. Returns the snapshot ID so the PDF export can
+  // use it immediately.
+  const saveToPlatform = useCallback(async (): Promise<string | null> => {
     setSaving(true)
     try {
-      const res = await fetch(`/api/nda-snapshots/${snapshotId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: `Mutual NDA — ${cover.recipientName || 'Recipient'}`,
-          status: 'draft',
-          payload: { cover },
-        }),
-      })
-      if (!res.ok) throw new Error('Failed to save')
-      toast.success('NDA saved to platform')
+      const name = `Mutual NDA — ${cover.recipientName || 'Recipient'}`
+      const payload = { cover }
+      let snapshotId = activeSnapshotId
+      if (snapshotId) {
+        const res = await fetch(`/api/nda-snapshots/${snapshotId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, status: 'draft', payload }),
+        })
+        if (!res.ok) throw new Error('Failed to save')
+        toast.success('NDA saved to platform')
+      } else {
+        const res = await fetch(`/api/nda-snapshots`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, status: 'draft', payload }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'Failed to save')
+        snapshotId = data.snapshot?.id
+        setActiveSnapshotId(snapshotId)
+        toast.success('NDA saved to platform')
+      }
+      return snapshotId
     } catch (err: any) {
       toast.error(err.message || 'Save failed')
+      return null
     } finally {
       setSaving(false)
     }
-  }, [snapshotId, cover])
+  }, [activeSnapshotId, cover])
 
   // Export Word
   const handleExportWord = useCallback(async () => {
@@ -117,20 +131,21 @@ export default function NDABuilder({ snapshotId }: { snapshotId?: string } = {})
       await exportNdaWord({ cover }, MASSAPRO_LOGO_URL)
       toast.success('NDA downloaded as Word')
     } catch (err: any) {
+      console.error('Word export error:', err)
       toast.error('Export failed: ' + (err?.message || 'unknown error'))
     }
   }, [cover])
 
-  // Export PDF (uses the platform PDF route)
-  const handleExportPDF = useCallback(() => {
+  // Export PDF — auto-saves first (creating a snapshot if needed), then opens
+  // the PDF route with the snapshot ID.
+  const handleExportPDF = useCallback(async () => {
+    const snapshotId = await saveToPlatform()
     if (!snapshotId) {
-      toast.info('PDF export requires a saved NDA. Click "Save to platform" first.')
+      toast.error('Cannot export PDF — save failed first')
       return
     }
-    saveToPlatform().then(() => {
-      window.open(`/api/nda-snapshots/${snapshotId}/pdf`, '_blank')
-    })
-  }, [snapshotId, saveToPlatform])
+    window.open(`/api/nda-snapshots/${snapshotId}/pdf`, '_blank')
+  }, [saveToPlatform])
 
   if (!hydrated) {
     return (
@@ -154,12 +169,10 @@ export default function NDABuilder({ snapshotId }: { snapshotId?: string } = {})
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {snapshotId && (
-            <Button variant="outline" size="sm" onClick={saveToPlatform} disabled={saving}>
-              <Save className="h-4 w-4 mr-1.5" />
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onClick={saveToPlatform} disabled={saving}>
+            <Save className="h-4 w-4 mr-1.5" />
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExportWord} style={{ borderColor: ORCHID, color: ORCHID }}>
             <Download className="h-4 w-4 mr-1.5" />
             Word
