@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner'
 import { Download, FileText, Plus, Trash2, Save, PenTool, Clock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import SignaturePad from '@/components/SignaturePad'
 import { exportNdaWord } from '@/lib/nda-export'
 import { NDACoverInfo, DEFAULT_NDA_COVER, NDA_SECTIONS } from '@/lib/nda-data'
 
@@ -151,9 +152,14 @@ export default function NDABuilder({ snapshotId: initialSnapshotId }: { snapshot
   // ---- E-signature ----
   const [signing, setSigning] = useState(false)
   const [signatures, setSignatures] = useState<{
-    sinba?: { signedBy: string; signedAt: string; signedByEmail: string }
-    recipient?: { signedBy: string; signedAt: string; signedByEmail: string }
+    sinba?: { signedBy: string; signedAt: string; signedByEmail: string; image?: string }
+    recipient?: { signedBy: string; signedAt: string; signedByEmail: string; image?: string }
   }>({})
+  // Signature images being drawn/uploaded (before signing)
+  const [sigImages, setSigImages] = useState<{ sinba: string | null; recipient: string | null }>({
+    sinba: null,
+    recipient: null,
+  })
 
   // Load existing signatures when a snapshot is active
   useEffect(() => {
@@ -174,14 +180,17 @@ export default function NDABuilder({ snapshotId: initialSnapshotId }: { snapshot
     setSigning(true)
     try {
       const signerName = role === 'sinba' ? cover.sinbaSignatoryName : cover.recipientSignatoryName
+      const signatureImage = sigImages[role]
       const res = await fetch(`/api/nda-snapshots/${snapshotId}/sign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ signedBy: signerName, role }),
+        body: JSON.stringify({ signedBy: signerName, role, signatureImage }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Sign failed')
       setSignatures((prev) => ({ ...prev, [role]: data.signature }))
+      // Clear the pending signature image
+      setSigImages((prev) => ({ ...prev, [role]: null }))
       toast.success(`${role === 'sinba' ? 'Sinba' : 'Recipient'} signed the NDA`, {
         description: `Signed at ${new Date(data.signature.signedAt).toLocaleString()}`,
       })
@@ -190,7 +199,7 @@ export default function NDABuilder({ snapshotId: initialSnapshotId }: { snapshot
     } finally {
       setSigning(false)
     }
-  }, [saveToPlatform, cover])
+  }, [saveToPlatform, cover, sigImages])
 
   if (!hydrated) {
     return (
@@ -413,11 +422,11 @@ export default function NDABuilder({ snapshotId: initialSnapshotId }: { snapshot
             E-Signature
           </CardTitle>
           <CardDescription>
-            Sign the NDA electronically — the timestamp is recorded automatically when each party signs
+            Sign the NDA electronically — draw your signature, upload an image, or click Sign. The timestamp is recorded automatically.
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <CardContent className="pt-6 space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Sinba signature */}
             <div className="rounded-lg border p-4" style={{ borderColor: LAVENDER, background: signatures.sinba ? '#F0FDF4' : '#fff' }}>
               <div className="flex items-center justify-between mb-3">
@@ -439,25 +448,40 @@ export default function NDABuilder({ snapshotId: initialSnapshotId }: { snapshot
                 )}
               </div>
               {signatures.sinba ? (
-                <div className="text-xs space-y-1" style={{ color: JET }}>
-                  <div><strong>Signed by:</strong> {signatures.sinba.signedBy}</div>
-                  <div><strong>Email:</strong> {signatures.sinba.signedByEmail}</div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    <strong>Signed at:</strong> {new Date(signatures.sinba.signedAt).toLocaleString()}
+                <div className="space-y-3">
+                  {/* Display the signature image if present */}
+                  {signatures.sinba.image && (
+                    <div className="rounded-lg border-2 p-2" style={{ borderColor: LAVENDER, background: '#fff' }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={signatures.sinba.image} alt="Sinba signature" className="max-h-20 mx-auto object-contain" />
+                    </div>
+                  )}
+                  <div className="text-xs space-y-1" style={{ color: JET }}>
+                    <div><strong>Signed by:</strong> {signatures.sinba.signedBy}</div>
+                    <div><strong>Email:</strong> {signatures.sinba.signedByEmail}</div>
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      <strong>Signed at:</strong> {new Date(signatures.sinba.signedAt).toLocaleString()}
+                    </div>
                   </div>
                 </div>
               ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleSign('sinba')}
-                  disabled={signing || !cover.sinbaSignatoryName}
-                  style={{ borderColor: ORCHID, color: ORCHID }}
-                >
-                  <PenTool className="h-4 w-4 mr-1.5" />
-                  {signing ? 'Signing…' : 'Sign as Sinba'}
-                </Button>
+                <div className="space-y-3">
+                  <SignaturePad
+                    value={sigImages.sinba}
+                    onChange={(val) => setSigImages((prev) => ({ ...prev, sinba: val }))}
+                    label="Draw or upload signature"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => handleSign('sinba')}
+                    disabled={signing || !cover.sinbaSignatoryName}
+                    style={{ background: ORCHID, color: '#fff' }}
+                  >
+                    <PenTool className="h-4 w-4 mr-1.5" />
+                    {signing ? 'Signing…' : 'Sign as Sinba'}
+                  </Button>
+                </div>
               )}
             </div>
 
@@ -482,30 +506,44 @@ export default function NDABuilder({ snapshotId: initialSnapshotId }: { snapshot
                 )}
               </div>
               {signatures.recipient ? (
-                <div className="text-xs space-y-1" style={{ color: JET }}>
-                  <div><strong>Signed by:</strong> {signatures.recipient.signedBy}</div>
-                  <div><strong>Email:</strong> {signatures.recipient.signedByEmail}</div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    <strong>Signed at:</strong> {new Date(signatures.recipient.signedAt).toLocaleString()}
+                <div className="space-y-3">
+                  {signatures.recipient.image && (
+                    <div className="rounded-lg border-2 p-2" style={{ borderColor: LAVENDER, background: '#fff' }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={signatures.recipient.image} alt="Recipient signature" className="max-h-20 mx-auto object-contain" />
+                    </div>
+                  )}
+                  <div className="text-xs space-y-1" style={{ color: JET }}>
+                    <div><strong>Signed by:</strong> {signatures.recipient.signedBy}</div>
+                    <div><strong>Email:</strong> {signatures.recipient.signedByEmail}</div>
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      <strong>Signed at:</strong> {new Date(signatures.recipient.signedAt).toLocaleString()}
+                    </div>
                   </div>
                 </div>
               ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleSign('recipient')}
-                  disabled={signing || !cover.recipientSignatoryName}
-                  style={{ borderColor: ORCHID, color: ORCHID }}
-                >
-                  <PenTool className="h-4 w-4 mr-1.5" />
-                  {signing ? 'Signing…' : 'Sign as Recipient'}
-                </Button>
+                <div className="space-y-3">
+                  <SignaturePad
+                    value={sigImages.recipient}
+                    onChange={(val) => setSigImages((prev) => ({ ...prev, recipient: val }))}
+                    label="Draw or upload signature"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => handleSign('recipient')}
+                    disabled={signing || !cover.recipientSignatoryName}
+                    style={{ background: ORCHID, color: '#fff' }}
+                  >
+                    <PenTool className="h-4 w-4 mr-1.5" />
+                    {signing ? 'Signing…' : 'Sign as Recipient'}
+                  </Button>
+                </div>
               )}
             </div>
           </div>
           {signatures.sinba && signatures.recipient && (
-            <div className="mt-4 rounded-lg p-3 text-center" style={{ background: '#F0FDF4', border: '1px solid #10B981' }}>
+            <div className="rounded-lg p-3 text-center" style={{ background: '#F0FDF4', border: '1px solid #10B981' }}>
               <p className="text-sm font-semibold" style={{ color: '#10B981' }}>
                 ✓ Both parties have signed — this NDA is fully executed
               </p>

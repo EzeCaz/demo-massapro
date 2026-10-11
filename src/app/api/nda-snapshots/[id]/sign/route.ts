@@ -27,13 +27,15 @@ export async function POST(
     }
 
     const body = await req.json()
-    const { signedBy, role } = body
+    const { signedBy, role, signatureImage } = body
 
     if (!signedBy || !role) {
       return NextResponse.json({ error: 'signedBy and role are required' }, { status: 400 })
     }
 
-    // Add the e-signature to the payload with an automatic timestamp
+    // Add the e-signature to the payload with an automatic timestamp.
+    // signatureImage is an optional base64 PNG/JPG data URL from the
+    // SignaturePad component (hand-drawn or uploaded).
     const payload = snapshot.payload as any
     const now = new Date().toISOString()
     if (!payload.signatures) payload.signatures = {}
@@ -41,6 +43,7 @@ export async function POST(
       signedBy,
       signedAt: now,
       signedByEmail: user.email || '',
+      ...(signatureImage ? { image: signatureImage } : {}),
     }
 
     // Update the status to 'signed' when both parties have signed
