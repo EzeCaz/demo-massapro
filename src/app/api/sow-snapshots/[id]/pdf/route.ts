@@ -140,10 +140,19 @@ export async function GET(
     let currentPageIdx = 0  // cover page = 0
     let tocPageIdx = -1      // set when we create the TOC page
 
-    // trackedAddPage — wraps doc.addPage() to keep currentPageIdx in sync
+    // CRITICAL: listen to PDFKit's 'pageAdded' event to keep currentPageIdx
+    // in sync. PDFKit automatically adds pages when text content overflows
+    // the page height — these auto-page-breaks do NOT go through our
+    // trackedAddPage() wrapper, so without this listener, currentPageIdx
+    // would be wrong and TOC links would point to the wrong pages.
+    doc.on('pageAdded', () => {
+      currentPageIdx++
+    })
+
+    // trackedAddPage — wraps doc.addPage() for explicit page breaks.
+    // currentPageIdx is incremented by the 'pageAdded' event listener.
     const trackedAddPage = () => {
       doc.addPage()
-      currentPageIdx++
     }
 
     // recordSection — call after drawing a section heading to record its
@@ -509,14 +518,17 @@ export async function GET(
     doc.fontSize(18).fillColor(LAVENDER)
     doc.text('Statement of Work', MARGIN, 235, { width: CONTENT_WIDTH, align: 'center' })
 
-    // Below the gradient banner — project subtitle (on stark white background)
-    doc.y += 10
-    doc.fillColor(JET).font('Helvetica-Oblique').fontSize(12)
-    doc.text(brandClean('Implementation of your MassaPro platform'), MARGIN, doc.y, { width: CONTENT_WIDTH, align: 'center' })
-    doc.y += 20
+    // Subtitle — still on the dark banner, WHITE text for good contrast
+    doc.fillColor(WHITE).font('Helvetica-Oblique').fontSize(12)
+    doc.text(brandClean('Implementation of your MassaPro platform'), MARGIN, 265, { width: CONTENT_WIDTH, align: 'center' })
 
-    // Cover info table — Soft Lavender label column, white value column,
-    // electric violet outer border, lavender inner dividers.
+    // Move BELOW the dark gradient banner (y = 60 + 280 = 340) so the cover
+    // info table is on the stark white area with good contrast.
+    doc.y = 370
+    doc.fillColor(JET).font('Helvetica').fontSize(11)
+
+    // Cover info table — white background rows with dark JET text for
+    // maximum readability. Electric violet header row with white text.
     const coverRows: [string, string][] = [
       ['Client', cover.clientName || '<client name>'],
       ['Client Demo', cover.clientDemo || '<demo>'],
