@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  BarChart3, FileText, Plug, LifeBuoy, ListChecks, Filter, Users,
+  BarChart3, FileText, Plug, LifeBuoy, ListChecks, Filter, Users, Sparkles,
 } from 'lucide-react'
 
 // Shared report primitives — see report-primitives.tsx for the full
@@ -235,9 +235,29 @@ export default function ReportsTab() {
             <StatCard label="Scenarios" value={scenariosAgg.total} icon={<ListChecks className="h-5 w-5" />} />
             <StatCard label="Integrations" value={integration.total} icon={<Plug className="h-5 w-5" />} />
             <StatCard label="SOWs" value={sow.total} icon={<FileText className="h-5 w-5" />} />
-            <StatCard label="Tasks" value={tasks.total} icon={<ListChecks className="h-5 w-5" />} />
-            <StatCard label="Tickets" value={tickets.total} icon={<LifeBuoy className="h-5 w-5" />} />
+            <StatCard label="NDA Drafts" value={(reporting?.ndas?.byStatus as any)?.draft || 0} icon={<FileText className="h-5 w-5" />} color="#F59E0B" />
+            <StatCard label="NDA Signed" value={(reporting?.ndas?.byStatus as any)?.signed || 0} icon={<FileText className="h-5 w-5" />} color="#10B981" />
           </div>
+
+          {/* Client Funnel: Demo → Scenario → SOW → NDA Draft → NDA Signed */}
+          <Card style={{ borderColor: LAVENDER }}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2" style={{ color: ORCHID }}>
+                <Sparkles className="h-3.5 w-3.5" />
+                Client Engagement Funnel
+              </CardTitle>
+              <CardDescription className="text-xs">Demo → Scenario → SOW → NDA Draft → NDA Signed</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-2">
+              <ClientFunnel
+                demos={demosAgg.total}
+                scenarios={scenariosAgg.total}
+                sows={sow.total}
+                ndaDrafts={(reporting?.ndas?.byStatus as any)?.draft || 0}
+                ndaSigned={(reporting?.ndas?.byStatus as any)?.signed || 0}
+              />
+            </CardContent>
+          </Card>
 
           {/* First chart row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -775,4 +795,59 @@ function buildSupportRows({ tickets }: any): any[][] {
     rows.push(['Priority summary', k, v as number]),
   )
   return rows
+}
+
+// ============================================================
+// ClientFunnel — visualizes the Demo → Scenario → SOW → NDA Draft →
+// NDA Signed engagement funnel as horizontal bars with conversion rates.
+// ============================================================
+function ClientFunnel({
+  demos, scenarios, sows, ndaDrafts, ndaSigned,
+}: {
+  demos: number
+  scenarios: number
+  sows: number
+  ndaDrafts: number
+  ndaSigned: number
+}) {
+  const stages = [
+    { label: 'Demos', value: demos, color: '#7F39FB' },
+    { label: 'Scenarios', value: scenarios, color: '#9D4FDB' },
+    { label: 'SOWs', value: sows, color: '#B47CF5' },
+    { label: 'NDA Drafts', value: ndaDrafts, color: '#F59E0B' },
+    { label: 'NDA Signed', value: ndaSigned, color: '#10B981' },
+  ]
+  const max = Math.max(1, ...stages.map((s) => s.value))
+  return (
+    <div className="space-y-3 py-2">
+      {stages.map((stage, i) => {
+        const prevValue = i === 0 ? stage.value : stages[i - 1].value
+        const conversionRate = prevValue > 0 ? Math.round((stage.value / prevValue) * 100) : 0
+        const widthPct = max > 0 ? (stage.value / max) * 100 : 0
+        return (
+          <div key={stage.label} className="flex items-center gap-3">
+            <div className="w-24 text-xs font-semibold text-right flex-shrink-0" style={{ color: JET }}>
+              {stage.label}
+            </div>
+            <div className="flex-1 relative">
+              <div className="h-8 rounded-md overflow-hidden" style={{ background: LAVENDER }}>
+                <div
+                  className="h-full rounded-md flex items-center px-3 transition-all"
+                  style={{ width: `${Math.max(widthPct, 8)}%`, background: stage.color }}
+                >
+                  <span className="text-xs font-bold text-white">{stage.value}</span>
+                </div>
+              </div>
+            </div>
+            <div className="w-16 text-xs flex-shrink-0" style={{ color: JET, opacity: 0.7 }}>
+              {i > 0 && prevValue > 0 ? `${conversionRate}%` : ''}
+            </div>
+          </div>
+        )
+      })}
+      <p className="text-xs italic pt-1" style={{ color: JET, opacity: 0.6 }}>
+        Conversion rates show the percentage of clients advancing from the previous stage to the next.
+      </p>
+    </div>
+  )
 }

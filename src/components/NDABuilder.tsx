@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { Download, FileText, Plus, Trash2, Save, PenTool, Clock } from 'lucide-react'
+import { Download, FileText, Plus, Trash2, Save, PenTool, Clock, Mail, Send, Copy, Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import SignaturePad from '@/components/SignaturePad'
 import { exportNdaWord } from '@/lib/nda-export'
@@ -23,23 +23,41 @@ const DARK_INDIGO = '#241445'
 const STORAGE_KEY = 'massapro-nda-state-v1'
 const MASSAPRO_LOGO_URL = '/massapro-logo.png'
 
-export default function NDABuilder({ snapshotId: initialSnapshotId }: { snapshotId?: string } = {}) {
+export default function NDABuilder({ snapshotId: initialSnapshotId, inviteToken }: { snapshotId?: string; inviteToken?: string } = {}) {
   const [cover, setCover] = useState<NDACoverInfo>(DEFAULT_NDA_COVER)
   const [hydrated, setHydrated] = useState(false)
   const [saving, setSaving] = useState(false)
   const [activeSnapshotId, setActiveSnapshotId] = useState<string | undefined>(initialSnapshotId)
+  const [isInviteMode, setIsInviteMode] = useState(false)
 
-  // Hydrate from localStorage or platform snapshot
+  // Hydrate from localStorage, platform snapshot, or invite token
   useEffect(() => {
     let cancelled = false
     async function hydrate() {
-      if (initialSnapshotId) {
+      if (inviteToken) {
+        // Invite mode — load NDA via share-lookup (no auth required)
+        setIsInviteMode(true)
+        try {
+          const res = await fetch(`/api/nda-share-lookup?token=${inviteToken}`)
+          if (!res.ok) throw new Error('Invalid invite')
+          const data = await res.json()
+          if (cancelled) return
+          if (data?.snapshot?.payload?.cover) {
+            setCover({ ...DEFAULT_NDA_COVER, ...data.snapshot.payload.cover })
+          }
+          if (data?.snapshot?.id) {
+            setActiveSnapshotId(data.snapshot.id)
+          }
+        } catch {
+          if (!cancelled) toast.error('Invalid or expired invite link')
+        }
+      } else if (initialSnapshotId) {
         try {
           const res = await fetch(`/api/nda-snapshots/${initialSnapshotId}`)
           if (!res.ok) throw new Error('Failed')
           const data = await res.json()
           if (cancelled) return
-          if (data.snapshot?.payload) {
+          if (data.snapshot?.payload?.cover) {
             setCover({ ...DEFAULT_NDA_COVER, ...data.snapshot.payload.cover })
           }
         } catch {}
@@ -56,7 +74,7 @@ export default function NDABuilder({ snapshotId: initialSnapshotId }: { snapshot
     }
     hydrate()
     return () => { cancelled = true }
-  }, [initialSnapshotId])
+  }, [initialSnapshotId, inviteToken])
 
   // Persist to localStorage on changes (only when not editing a snapshot)
   useEffect(() => {
@@ -200,6 +218,82 @@ export default function NDABuilder({ snapshotId: initialSnapshotId }: { snapshot
       setSigning(false)
     }
   }, [saveToPlatform, cover, sigImages])
+
+  // ---- Invite to sign ----
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviting, setInviting] = useState(false)
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null)
+
+  const handleInvite = useCallback(async () => {
+    if (!inviteEmail) {
+      toast.error('Please enter the recipient\'s email')
+      return
+    }
+    const snapshotId = await saveToPlatform()
+    if (!snapshotId) return
+    setInviting(true)
+    try {
+      const res = await fetch(`/api/nda-snapshots/${snapshotId}/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inviteEmail }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Invite failed')
+      setInviteUrl(data.inviteUrl)
+      toast.success('Invite link generated', {
+        description: `Share this link with ${inviteEmail} so they can sign the NDA`,
+      })
+    } catch (err: any) {
+      toast.error(err.message || 'Invite failed')
+    } finally {
+      setInviting(false)
+    }
+  }, [inviteEmail, saveToPlatform])
+
+  // ---- Send signed copy ----
+  const [sendEmail, setSendEmail] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sentPdfUrl, setSentPdfUrl] = useState<string | null>(null)
+
+  const handleSendSigned = useCallback(async () => {
+    if (!sendEmail) {
+      toast.error('Please enter the email to send the signed copy to')
+      return
+    }
+    if (!activeSnapshotId) {
+      toast.error('Save the NDA first')
+      return
+    }
+    setSending(true)
+    try {
+      const res = await fetch(`/api/nda-snapshots/${activeSnapshotId}/send-signed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: sendEmail }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Send failed')
+      setSentPdfUrl(data.pdfUrl)
+      toast.success('Signed copy ready', {
+        description: data.message || `Signed PDF generated for ${sendEmail}`,
+      })
+    } catch (err: any) {
+      toast.error(err.message || 'Send failed')
+    } finally {
+      setSending(false)
+    }
+  }, [sendEmail, activeSnapshotId])
+
+  // Copy to clipboard
+  const [copied, setCopied] = useState(false)
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      toast.success('Copied to clipboard')
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   if (!hydrated) {
     return (
@@ -551,6 +645,126 @@ export default function NDABuilder({ snapshotId: initialSnapshotId }: { snapshot
           )}
         </CardContent>
       </Card>
+
+      {/* Invite to Sign — only visible when not in invite mode */}
+      {!isInviteMode && (
+        <Card style={{ borderColor: LAVENDER }}>
+          <CardHeader style={{ borderBottom: `2px solid ${LAVENDER}` }}>
+            <CardTitle className="flex items-center gap-2" style={{ color: ORCHID }}>
+              <Mail className="h-5 w-5" />
+              Invite to Sign
+            </CardTitle>
+            <CardDescription>
+              Generate a share link for the recipient to fill in their details, draw/upload their signature, and sign the NDA
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="recipient@example.com"
+                style={{ borderColor: LAVENDER }}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleInvite}
+                disabled={inviting || !inviteEmail}
+                style={{ background: ORCHID, color: '#fff' }}
+              >
+                <Mail className="h-4 w-4 mr-1.5" />
+                {inviting ? 'Generating…' : 'Generate Invite Link'}
+              </Button>
+            </div>
+            {inviteUrl && (
+              <div className="rounded-lg border p-3 space-y-2" style={{ borderColor: LAVENDER, background: '#fff' }}>
+                <div className="text-xs font-semibold uppercase" style={{ color: JET, opacity: 0.7 }}>
+                  Share this link with {inviteEmail}:
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs flex-1 truncate rounded px-2 py-1.5" style={{ background: LAVENDER, color: ORCHID }}>
+                    {inviteUrl}
+                  </code>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyToClipboard(inviteUrl)}
+                    style={{ borderColor: ORCHID, color: ORCHID }}
+                  >
+                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs" style={{ color: JET, opacity: 0.6 }}>
+                  The recipient will be able to fill in their details, draw or upload a signature, and sign the NDA. The timestamp is recorded automatically when they sign.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Send Signed Copy — only visible when both parties have signed */}
+      {signatures.sinba && signatures.recipient && (
+        <Card style={{ borderColor: LAVENDER }}>
+          <CardHeader style={{ borderBottom: `2px solid ${LAVENDER}` }}>
+            <CardTitle className="flex items-center gap-2" style={{ color: ORCHID }}>
+              <Send className="h-5 w-5" />
+              Send Signed Copy
+            </CardTitle>
+            <CardDescription>
+              Generate a download link for the fully signed NDA PDF and share it with the specified email
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Input
+                type="email"
+                value={sendEmail}
+                onChange={(e) => setSendEmail(e.target.value)}
+                placeholder="email@example.com (who to send the signed copy to)"
+                style={{ borderColor: LAVENDER }}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleSendSigned}
+                disabled={sending || !sendEmail}
+                style={{ background: '#10B981', color: '#fff' }}
+              >
+                <Send className="h-4 w-4 mr-1.5" />
+                {sending ? 'Generating…' : 'Generate & Send'}
+              </Button>
+            </div>
+            {sentPdfUrl && (
+              <div className="rounded-lg border p-3 space-y-2" style={{ borderColor: '#10B981', background: '#F0FDF4' }}>
+                <div className="text-xs font-semibold uppercase" style={{ color: '#10B981' }}>
+                  ✓ Signed PDF ready for {sendEmail}
+                </div>
+                <div className="flex items-center gap-2">
+                  <a href={sentPdfUrl} target="_blank" rel="noreferrer">
+                    <Button size="sm" variant="outline" style={{ borderColor: '#10B981', color: '#10B981' }}>
+                      <Download className="h-4 w-4 mr-1.5" />
+                      Download Signed PDF
+                    </Button>
+                  </a>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyToClipboard(sentPdfUrl)}
+                    style={{ borderColor: ORCHID, color: ORCHID }}
+                  >
+                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    <span className="ml-1.5">Copy Link</span>
+                  </Button>
+                </div>
+                <p className="text-xs" style={{ color: JET, opacity: 0.7 }}>
+                  Download the signed PDF and forward it to {sendEmail}, or share the download link directly.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

@@ -281,6 +281,17 @@ export async function GET() {
         total: visibleDemos.length,
         list: demosList,
       },
+      ndas: {
+        total: await db.nDASnapshot.count({ where: isAdmin ? {} : { ownerId: user.id } }),
+        byStatus: (await db.nDASnapshot.groupBy({
+          by: ['status'],
+          where: isAdmin ? {} : { ownerId: user.id },
+          _count: { _all: true },
+        })).reduce((acc, row) => {
+          acc[row.status] = row._count._all
+          return acc
+        }, {} as Record<string, number>),
+      },
       cadence: days,
     })
   } catch (e: any) {

@@ -237,17 +237,99 @@ export async function GET(
     drawBody('IN WITNESS WHEREOF, the Parties hereto have executed this Mutual Non-Disclosure and Non-Circumvention Agreement as of the Effective Date set forth above.', { bold: true })
     doc.y += 10
 
+    // Signature block — renders the signature image, signed-by name, and
+    // timestamp for each party. If a party hasn't signed yet, shows blank
+    // fields for them to fill in.
+    const signatures = (payload.signatures || {}) as {
+      sinba?: { signedBy: string; signedAt: string; signedByEmail: string; image?: string }
+      recipient?: { signedBy: string; signedAt: string; signedByEmail: string; image?: string }
+    }
     const sigs = buildNdaSignatures(cover)
-    drawTable(
-      [
-        ['SINBA GROUP ISRAEL LTD.', 'RECIPIENT'],
-        [`By: ${sigs.sinba[1][1]}`, `By: ${sigs.recipient[1][1]}`],
-        [`Name: ${sigs.sinba[2][1]}`, `Name: ${sigs.recipient[2][1]}`],
-        [`Title: ${sigs.sinba[3][1]}`, `Title: ${sigs.recipient[3][1]}`],
-        [`Date: ${sigs.sinba[4][1]}`, `Date: ${sigs.recipient[4][1]}`],
-      ],
-      [50, 50]
-    )
+
+    // Draw a two-column signature block with space for the signature image
+    const sigColWidth = CONTENT_WIDTH / 2
+    const sigStartY = doc.y
+    const sigBoxHeight = 200 // total height for each signature column
+    const sigImageHeight = 80 // height of the signature image area
+
+    // Outer border
+    doc.moveTo(MARGIN, sigStartY).lineTo(MARGIN + CONTENT_WIDTH, sigStartY).strokeColor(ORCHID).lineWidth(1.5).stroke()
+
+    // Column divider
+    doc.moveTo(MARGIN + sigColWidth, sigStartY).lineTo(MARGIN + sigColWidth, sigStartY + sigBoxHeight).strokeColor(LAVENDER).lineWidth(0.5).stroke()
+
+    // Header row
+    doc.rect(MARGIN, sigStartY, CONTENT_WIDTH, 24).fill(ORCHID)
+    doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(10)
+    doc.text('SINBA GROUP ISRAEL LTD.', MARGIN + 8, sigStartY + 7, { width: sigColWidth - 16, align: 'left', lineBreak: false })
+    doc.text('RECIPIENT', MARGIN + sigColWidth + 8, sigStartY + 7, { width: sigColWidth - 16, align: 'left', lineBreak: false })
+
+    let sigY = sigStartY + 24
+
+    // ---- Sinba signature column ----
+    // Signature image area (if signed with an image)
+    if (signatures.sinba?.image) {
+      try {
+        const imgBuffer = Buffer.from(signatures.sinba.image.split(',')[1], 'base64')
+        doc.image(imgBuffer, MARGIN + 20, sigY, { fit: [sigColWidth - 40, sigImageHeight] })
+      } catch {}
+    } else {
+      // Empty signature box
+      doc.rect(MARGIN + 20, sigY, sigColWidth - 40, sigImageHeight).stroke(LAVENDER).lineWidth(0.5).dash(2, { space: 3 })
+      doc.undash()
+      doc.fillColor(GREY).font('Helvetica-Oblique').fontSize(10)
+      doc.text('Signature', MARGIN + 20, sigY + sigImageHeight / 2 - 5, { width: sigColWidth - 40, align: 'center', lineBreak: false })
+    }
+    sigY += sigImageHeight + 4
+
+    // Sinba details
+    doc.fillColor(JET).font('Helvetica').fontSize(9)
+    doc.text(`By: ${signatures.sinba?.signedBy || sigs.sinba[1][1] || '________________'}`, MARGIN + 20, sigY, { width: sigColWidth - 40, lineBreak: false })
+    sigY += 14
+    doc.text(`Name: ${signatures.sinba?.signedBy || sigs.sinba[2][1] || '________________'}`, MARGIN + 20, sigY, { width: sigColWidth - 40, lineBreak: false })
+    sigY += 14
+    doc.text(`Title: ${sigs.sinba[3][1] || '________________'}`, MARGIN + 20, sigY, { width: sigColWidth - 40, lineBreak: false })
+    sigY += 14
+    if (signatures.sinba?.signedAt) {
+      doc.fillColor('#10B981').font('Helvetica-Bold').fontSize(9)
+      doc.text(`Signed: ${new Date(signatures.sinba.signedAt).toLocaleString()}`, MARGIN + 20, sigY, { width: sigColWidth - 40, lineBreak: false })
+    } else {
+      doc.text(`Date: ${sigs.sinba[4][1] || '________________'}`, MARGIN + 20, sigY, { width: sigColWidth - 40, lineBreak: false })
+    }
+
+    // ---- Recipient signature column ----
+    sigY = sigStartY + 24
+    if (signatures.recipient?.image) {
+      try {
+        const imgBuffer = Buffer.from(signatures.recipient.image.split(',')[1], 'base64')
+        doc.image(imgBuffer, MARGIN + sigColWidth + 20, sigY, { fit: [sigColWidth - 40, sigImageHeight] })
+      } catch {}
+    } else {
+      doc.rect(MARGIN + sigColWidth + 20, sigY, sigColWidth - 40, sigImageHeight).stroke(LAVENDER).lineWidth(0.5).dash(2, { space: 3 })
+      doc.undash()
+      doc.fillColor(GREY).font('Helvetica-Oblique').fontSize(10)
+      doc.text('Signature', MARGIN + sigColWidth + 20, sigY + sigImageHeight / 2 - 5, { width: sigColWidth - 40, align: 'center', lineBreak: false })
+    }
+    sigY += sigImageHeight + 4
+
+    doc.fillColor(JET).font('Helvetica').fontSize(9)
+    doc.text(`By: ${signatures.recipient?.signedBy || sigs.recipient[1][1] || '________________'}`, MARGIN + sigColWidth + 20, sigY, { width: sigColWidth - 40, lineBreak: false })
+    sigY += 14
+    doc.text(`Name: ${signatures.recipient?.signedBy || sigs.recipient[2][1] || '________________'}`, MARGIN + sigColWidth + 20, sigY, { width: sigColWidth - 40, lineBreak: false })
+    sigY += 14
+    doc.text(`Title: ${sigs.recipient[3][1] || '________________'}`, MARGIN + sigColWidth + 20, sigY, { width: sigColWidth - 40, lineBreak: false })
+    sigY += 14
+    if (signatures.recipient?.signedAt) {
+      doc.fillColor('#10B981').font('Helvetica-Bold').fontSize(9)
+      doc.text(`Signed: ${new Date(signatures.recipient.signedAt).toLocaleString()}`, MARGIN + sigColWidth + 20, sigY, { width: sigColWidth - 40, lineBreak: false })
+    } else {
+      doc.text(`Date: ${sigs.recipient[4][1] || '________________'}`, MARGIN + sigColWidth + 20, sigY, { width: sigColWidth - 40, lineBreak: false })
+    }
+
+    // Bottom border
+    doc.y = sigStartY + sigBoxHeight
+    doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).strokeColor(ORCHID).lineWidth(1.5).stroke()
+    doc.y += 10
 
     // Annex 1
     doc.addPage()
