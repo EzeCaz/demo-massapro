@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import NDABuilder from '@/components/NDABuilder'
+import MassaProHeader from '@/components/MassaProHeader'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,10 @@ async function NDAPageInner({ searchParams }: { searchParams: Promise<{ snapshot
   const { snapshot } = await searchParams
   return (
     <div className="min-h-screen bg-background">
-      <NDABuilder snapshotId={snapshot} />
+      <MassaProHeader />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <NDABuilder snapshotId={snapshot} />
+      </main>
     </div>
   )
 }

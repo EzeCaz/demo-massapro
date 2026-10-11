@@ -4,24 +4,22 @@ import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useLanguage } from '@/hooks/useLanguage'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Users, FileText, Plug, BarChart3, Shield } from 'lucide-react'
+import { Users, FileText, Plug, BarChart3, Shield, FileSignature } from 'lucide-react'
 import UserManagementSubTab from './UserManagementSubTab'
 import SOWFormEditSubTab from './SOWFormEditSubTab'
+import NDAFormEditSubTab from './NDAFormEditSubTab'
 import IntegrationEditSubTab from './IntegrationEditSubTab'
 import AdminReportsSubTab from './AdminReportsSubTab'
 
 // GlobalAdminTab — admin + super_admin only.
 //
-// 4 sub-tabs (per the user's brief):
+// 5 sub-tabs (per the user's brief):
 //   A) User management: team, company, emails, personal & professional
 //      details, LinkedIn account, etc. (super_admin only on mutations)
 //   B) SOW form edit using AI (add new file or edit existing SOW details + tasks)
-//   C) Integration form edit
-//   D) Reports
-//
-// The page wrapper already gates this tab to admin+super_admin, so we
-// trust that here. Mutation-level permissions (e.g. "only super_admin
-// can demote a super_admin") are enforced in the API.
+//   C) NDA form edit — list all NDAs grouped by recipient, e-signature status
+//   D) Integration form edit
+//   E) Reports
 export default function GlobalAdminTab() {
   const { t } = useLanguage()
   const { data: session } = useSession()
@@ -50,6 +48,10 @@ export default function GlobalAdminTab() {
             <FileText className="h-4 w-4" />
             <span className="hidden sm:inline">{t('platform.tab.admin.sowEdit')}</span>
           </TabsTrigger>
+          <TabsTrigger value="nda" className="flex items-center gap-1.5 text-xs sm:text-sm">
+            <FileSignature className="h-4 w-4" />
+            <span className="hidden sm:inline">NDA Form Edit</span>
+          </TabsTrigger>
           <TabsTrigger value="integration" className="flex items-center gap-1.5 text-xs sm:text-sm">
             <Plug className="h-4 w-4" />
             <span className="hidden sm:inline">{t('platform.tab.admin.integrationEdit')}</span>
@@ -65,6 +67,9 @@ export default function GlobalAdminTab() {
         </TabsContent>
         <TabsContent value="sow" className="focus-visible:outline-none">
           <SOWFormEditSubTab />
+        </TabsContent>
+        <TabsContent value="nda" className="focus-visible:outline-none">
+          <NDAFormEditSubTab />
         </TabsContent>
         <TabsContent value="integration" className="focus-visible:outline-none">
           <IntegrationEditSubTab />

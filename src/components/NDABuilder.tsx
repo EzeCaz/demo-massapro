@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { Download, FileText, Plus, Trash2, Save } from 'lucide-react'
+import { Download, FileText, Plus, Trash2, Save, PenTool, Clock } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { exportNdaWord } from '@/lib/nda-export'
 import { NDACoverInfo, DEFAULT_NDA_COVER, NDA_SECTIONS } from '@/lib/nda-data'
 
@@ -146,6 +147,50 @@ export default function NDABuilder({ snapshotId: initialSnapshotId }: { snapshot
     }
     window.open(`/api/nda-snapshots/${snapshotId}/pdf`, '_blank')
   }, [saveToPlatform])
+
+  // ---- E-signature ----
+  const [signing, setSigning] = useState(false)
+  const [signatures, setSignatures] = useState<{
+    sinba?: { signedBy: string; signedAt: string; signedByEmail: string }
+    recipient?: { signedBy: string; signedAt: string; signedByEmail: string }
+  }>({})
+
+  // Load existing signatures when a snapshot is active
+  useEffect(() => {
+    if (!activeSnapshotId) return
+    fetch(`/api/nda-snapshots/${activeSnapshotId}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data?.snapshot?.payload?.signatures) {
+          setSignatures(data.snapshot.payload.signatures)
+        }
+      })
+      .catch(() => {})
+  }, [activeSnapshotId])
+
+  const handleSign = useCallback(async (role: 'sinba' | 'recipient') => {
+    const snapshotId = await saveToPlatform()
+    if (!snapshotId) return
+    setSigning(true)
+    try {
+      const signerName = role === 'sinba' ? cover.sinbaSignatoryName : cover.recipientSignatoryName
+      const res = await fetch(`/api/nda-snapshots/${snapshotId}/sign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signedBy: signerName, role }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Sign failed')
+      setSignatures((prev) => ({ ...prev, [role]: data.signature }))
+      toast.success(`${role === 'sinba' ? 'Sinba' : 'Recipient'} signed the NDA`, {
+        description: `Signed at ${new Date(data.signature.signedAt).toLocaleString()}`,
+      })
+    } catch (err: any) {
+      toast.error(err.message || 'Sign failed')
+    } finally {
+      setSigning(false)
+    }
+  }, [saveToPlatform, cover])
 
   if (!hydrated) {
     return (
@@ -360,26 +405,112 @@ export default function NDABuilder({ snapshotId: initialSnapshotId }: { snapshot
         </CardContent>
       </Card>
 
-      {/* Preview — Section List */}
+      {/* E-Signature Section */}
       <Card style={{ borderColor: LAVENDER }}>
         <CardHeader style={{ borderBottom: `2px solid ${LAVENDER}` }}>
-          <CardTitle style={{ color: ORCHID }}>Document Sections</CardTitle>
-          <CardDescription>The NDA contains {NDA_SECTIONS.length} numbered sections plus the Annex</CardDescription>
+          <CardTitle className="flex items-center gap-2" style={{ color: ORCHID }}>
+            <PenTool className="h-5 w-5" />
+            E-Signature
+          </CardTitle>
+          <CardDescription>
+            Sign the NDA electronically — the timestamp is recorded automatically when each party signs
+          </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="space-y-1">
-            {NDA_SECTIONS.map((sec) => (
-              <div key={sec.number} className="flex items-center gap-3 text-sm py-1.5 border-b" style={{ borderColor: LAVENDER }}>
-                <span className="font-bold" style={{ color: ORCHID }}>{sec.number}.</span>
-                <span style={{ color: JET }}>{sec.title}</span>
-                <span className="ml-auto text-xs" style={{ color: JET, opacity: 0.6 }}>{sec.paragraphs.length} para.</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Sinba signature */}
+            <div className="rounded-lg border p-4" style={{ borderColor: LAVENDER, background: signatures.sinba ? '#F0FDF4' : '#fff' }}>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="font-semibold text-sm" style={{ color: JET }}>SINBA GROUP ISRAEL LTD.</div>
+                  <div className="text-xs" style={{ color: JET, opacity: 0.7 }}>
+                    Signatory: {cover.sinbaSignatoryName || '—'} · {cover.sinbaSignatoryTitle || '—'}
+                  </div>
+                </div>
+                {signatures.sinba ? (
+                  <Badge variant="outline" className="text-xs" style={{ borderColor: '#10B981', color: '#10B981' }}>
+                    <Clock className="h-3 w-3 mr-1" />
+                    Signed
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs" style={{ borderColor: LAVENDER, color: JET }}>
+                    Pending
+                  </Badge>
+                )}
               </div>
-            ))}
-            <div className="flex items-center gap-3 text-sm py-1.5">
-              <span className="font-bold" style={{ color: ORCHID }}>★</span>
-              <span style={{ color: JET }}>Annex 1 — Tech Platforms &amp; Providers</span>
+              {signatures.sinba ? (
+                <div className="text-xs space-y-1" style={{ color: JET }}>
+                  <div><strong>Signed by:</strong> {signatures.sinba.signedBy}</div>
+                  <div><strong>Email:</strong> {signatures.sinba.signedByEmail}</div>
+                  <div className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    <strong>Signed at:</strong> {new Date(signatures.sinba.signedAt).toLocaleString()}
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleSign('sinba')}
+                  disabled={signing || !cover.sinbaSignatoryName}
+                  style={{ borderColor: ORCHID, color: ORCHID }}
+                >
+                  <PenTool className="h-4 w-4 mr-1.5" />
+                  {signing ? 'Signing…' : 'Sign as Sinba'}
+                </Button>
+              )}
+            </div>
+
+            {/* Recipient signature */}
+            <div className="rounded-lg border p-4" style={{ borderColor: LAVENDER, background: signatures.recipient ? '#F0FDF4' : '#fff' }}>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="font-semibold text-sm" style={{ color: JET }}>RECIPIENT</div>
+                  <div className="text-xs" style={{ color: JET, opacity: 0.7 }}>
+                    Signatory: {cover.recipientSignatoryName || '—'} · {cover.recipientSignatoryTitle || '—'}
+                  </div>
+                </div>
+                {signatures.recipient ? (
+                  <Badge variant="outline" className="text-xs" style={{ borderColor: '#10B981', color: '#10B981' }}>
+                    <Clock className="h-3 w-3 mr-1" />
+                    Signed
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs" style={{ borderColor: LAVENDER, color: JET }}>
+                    Pending
+                  </Badge>
+                )}
+              </div>
+              {signatures.recipient ? (
+                <div className="text-xs space-y-1" style={{ color: JET }}>
+                  <div><strong>Signed by:</strong> {signatures.recipient.signedBy}</div>
+                  <div><strong>Email:</strong> {signatures.recipient.signedByEmail}</div>
+                  <div className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    <strong>Signed at:</strong> {new Date(signatures.recipient.signedAt).toLocaleString()}
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleSign('recipient')}
+                  disabled={signing || !cover.recipientSignatoryName}
+                  style={{ borderColor: ORCHID, color: ORCHID }}
+                >
+                  <PenTool className="h-4 w-4 mr-1.5" />
+                  {signing ? 'Signing…' : 'Sign as Recipient'}
+                </Button>
+              )}
             </div>
           </div>
+          {signatures.sinba && signatures.recipient && (
+            <div className="mt-4 rounded-lg p-3 text-center" style={{ background: '#F0FDF4', border: '1px solid #10B981' }}>
+              <p className="text-sm font-semibold" style={{ color: '#10B981' }}>
+                ✓ Both parties have signed — this NDA is fully executed
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
