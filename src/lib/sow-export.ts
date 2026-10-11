@@ -253,7 +253,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
                 children: [
                   new TableCell({
                     width: { size: 50, type: WidthType.PERCENTAGE },
-                    shading: { type: ShadingType.CLEAR, color: 'auto', fill: '4C1D95' },
+                    shading: { type: ShadingType.CLEAR, color: 'auto', fill: '0A0711' },
                     margins: { top: 200, bottom: 100, left: 100, right: 100 },
                     borders: noBorderAll() as any,
                     verticalAlign: 'center',
@@ -266,7 +266,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
                   }),
                   new TableCell({
                     width: { size: 50, type: WidthType.PERCENTAGE },
-                    shading: { type: ShadingType.CLEAR, color: 'auto', fill: '4C1D95' },
+                    shading: { type: ShadingType.CLEAR, color: 'auto', fill: '0A0711' },
                     margins: { top: 200, bottom: 100, left: 100, right: 100 },
                     borders: noBorderAll() as any,
                     verticalAlign: 'center',
@@ -294,7 +294,7 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
                 children: [
                   new TableCell({
                     width: { size: 100, type: WidthType.PERCENTAGE },
-                    shading: { type: ShadingType.CLEAR, color: 'auto', fill: '4C1D95' },
+                    shading: { type: ShadingType.CLEAR, color: 'auto', fill: '0A0711' },
                     margins: { top: 200, bottom: 100, left: 0, right: 0 },
                     borders: noBorderAll() as any,
                     verticalAlign: 'center',
@@ -309,16 +309,18 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
               }),
             ],
           }))
-    : gradientRow('4C1D95', 1800, [])
+    : gradientRow('0A0711', 1800, [])
 
   const coverChildren: (Paragraph | Table)[] = [
-    // Top: MassaPro logo (+ client logo on right when set). Text goes BELOW.
+    // Dark gradient banner — 3 bands (near-black → violet → indigo) to
+    // simulate the PDF's dark immersive gradient. MassaPro Visual & Design
+    // System: near-black #0A0711 at top, dark violet #3D1F6B in the middle,
+    // rich indigo-violet #241445 at bottom.
     logoRow,
-    // Transition bands — purple → lavender → white
-    gradientRow(ORCHID_DEEP, 160, []),
-    gradientRow(ORCHID_MID, 160, []),
-    // Brand name — white on the orchid band, BELOW the logo
-    gradientRow(ORCHID, 220, [
+    gradientRow('0A0711', 160, []),
+    gradientRow('3D1F6B', 160, []),
+    // Brand name — WHITE on the dark indigo band, BELOW the logo
+    gradientRow('241445', 220, [
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 0, after: 0 },
@@ -327,18 +329,18 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
         ],
       }),
     ]),
-    // Lighter purple band with the document title — BELOW the brand name
-    gradientRow('A855F7', 220, [
+    // Document title — LAVENDER on the dark indigo band, BELOW the brand name
+    gradientRow('241445', 220, [
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 0, after: 0 },
         children: [
-          new TextRun({ text: 'Statement of Work', bold: true, size: 36, color: WHITE, font: 'Calibri' }),
+          new TextRun({ text: 'Statement of Work', bold: true, size: 36, color: LAVENDER, font: 'Calibri' }),
         ],
       }),
     ]),
-    // Soft lavender band with the subtitle
-    gradientRow('C084FC', 200, [
+    // Subtitle — LAVENDER italic on the dark indigo band
+    gradientRow('241445', 200, [
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 0, after: 0 },
@@ -347,14 +349,14 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
             text: brandClean(`Implementation of your MassaPro platform`),
             italics: true,
             size: 24,
-            color: WHITE,
+            color: LAVENDER,
             font: 'Calibri',
           }),
         ],
       }),
     ]),
+    gradientRow('241445', 120, []),
     gradientRow(LAVENDER, 120, []),
-    gradientRow(LAVENDER_LIGHT, 120, []),
     // Spacer
     new Paragraph({ spacing: { before: 480, after: 320 }, children: [] }),
     // Cover info table — Soft Lavender label column, white value column,

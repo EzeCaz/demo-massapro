@@ -597,8 +597,13 @@ export async function GET(
       firstService = false
       drawSectionHeading('Scope')
       drawSubHeading('Phase 1')
+      // Record the service heading position so the TOC can link to it.
+      // We record this BEFORE drawing the service name so the link target
+      // is at the start of the service section.
+      const svcDestName = `Service: ${svc.name}`
       doc.fontSize(16).fillColor(ORCHID).font('Helvetica-Bold')
       doc.text(brandClean(svc.name), MARGIN, doc.y, { width: CONTENT_WIDTH })
+      recordSection(svcDestName)
       doc.y += 6
       doc.fillColor(JET).font('Helvetica').fontSize(11)
       drawBody(brandClean((svc as Service).intro || svc.description))
@@ -648,6 +653,8 @@ export async function GET(
     drawSubHeading('Phase 2')
     doc.fontSize(16).fillColor(ORCHID).font('Helvetica-Bold')
     doc.text('Integration', MARGIN, doc.y, { width: CONTENT_WIDTH })
+    // Record the Phase 2 Integration heading position so the TOC can link to it
+    recordSection('Phase 2: Integration')
     doc.y += 6
     doc.fillColor(JET).font('Helvetica').fontSize(11)
     const clientName = cover.clientName || '<client name>'
@@ -766,12 +773,13 @@ export async function GET(
     )
 
     // ---- Table of Contents — render content + clickable links ------------
-    // Now that all sections have been rendered, we render the TOC content
-    // on the reserved TOC page. The TOC shows:
-    //   Phase 1 (heading) + bullets for each selected service
-    //   Phase 2 (heading) + bullets for Integration, Training & Handover
-    //   Project Milestones (link → milestones section)
-    //   Signatures (link → signatures section)
+    // Every line in the TOC is clickable:
+    //   - Phase 1 heading → links to the Scope section
+    //   - Each service bullet → links to that service's heading
+    //   - Phase 2 heading → links to the Phase 2 Integration section
+    //   - Each Phase 2 bullet → links to the Phase 2 Integration section
+    //   - Project Milestones → links to the Milestones section
+    //   - Signatures → links to the Signatures section
     if (tocPageIdx >= 0) {
       doc.switchToPage(tocPageIdx)
       doc.y = 80
@@ -783,112 +791,107 @@ export async function GET(
       doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).strokeColor(ORCHID).lineWidth(1.5).stroke()
       doc.y += 20
 
-      // Find the Milestones and Signatures section destinations for links
+      // Find section destinations for links
       const findDest = (name: string) => sectionDests.find((d) => d.name === name)
+      const scopeDest = findDest('Scope')
+      const phase2Dest = findDest('Phase 2: Integration')
       const milestonesDest = findDest('Project Milestones')
       const signaturesDest = findDest('Signatures')
 
-      // Track link entry positions for annotation overlays
-      const tocLinks: { dest: { name: string; pageIdx: number; y: number }; entryY: number; label: string }[] = []
+      // Track ALL link entry positions for annotation overlays
+      // Each entry: { dest (pageIdx + y), entryY (TOC line position), entryHeight }
+      const tocLinks: { dest: { pageIdx: number; y: number }; entryY: number; entryHeight: number }[] = []
 
-      // ---- Phase 1 heading ----
-      doc.fontSize(14).fillColor(ORCHID).font('Helvetica-Bold')
-      doc.text('Phase 1', MARGIN, doc.y, { width: CONTENT_WIDTH })
-      doc.y += 16
+      // Helper — draw a clickable heading line and record its link annotation
+      const drawTocHeadingLink = (label: string, dest: { pageIdx: number; y: number } | undefined) => {
+        if (!dest) return
+        const entryY = doc.y
+        doc.fontSize(14).fillColor(ORCHID).font('Helvetica-Bold')
+        doc.text(label, MARGIN, entryY, { width: CONTENT_WIDTH, lineBreak: false })
+        const h = 18
+        tocLinks.push({ dest, entryY, entryHeight: h })
+        doc.y = entryY + h + 4
+      }
 
-      // Phase 1 service bullets
-      doc.fontSize(11).fillColor(JET).font('Helvetica')
-      if (allServices.length === 0) {
-        doc.fillColor(ORCHID).font('Helvetica-Bold')
-        doc.text('\u2022   ', MARGIN + 20, doc.y, { width: CONTENT_WIDTH - 20, continued: true })
+      // Helper — draw a clickable bullet line and record its link annotation
+      const drawTocBulletLink = (label: string, dest: { pageIdx: number; y: number } | undefined) => {
+        if (!dest) return
+        const entryY = doc.y
+        const indent = 20
+        const colWidth = CONTENT_WIDTH - indent
+        doc.fontSize(11).fillColor(ORCHID).font('Helvetica-Bold')
+        doc.text('\u2022   ', MARGIN + indent, entryY, { width: colWidth, continued: true })
         doc.fillColor(JET).font('Helvetica')
-        doc.text('No services selected.', { width: CONTENT_WIDTH - 20 })
+        doc.text(brandClean(label), { width: colWidth })
+        const h = 14
+        tocLinks.push({ dest, entryY, entryHeight: h })
+        doc.y = entryY + h + 2
+      }
+
+      // Helper — draw a clickable line with dotted leader + page number
+      const drawTocPageLink = (label: string, dest: { pageIdx: number; y: number } | undefined) => {
+        if (!dest) return
+        const entryY = doc.y
+        doc.fontSize(13).fillColor(ORCHID).font('Helvetica-Bold')
+        doc.text(label, MARGIN, entryY, { width: 350, align: 'left', lineBreak: false })
+        const displayPage = dest.pageIdx + 1
+        doc.text(String(displayPage), PAGE_WIDTH - MARGIN - 50, entryY, { width: 50, align: 'right', lineBreak: false })
+        // Dotted leader
+        const nameWidth = doc.widthOfString(label, { font: 'Helvetica-Bold', fontSize: 13 })
+        const pageX = PAGE_WIDTH - MARGIN - 50
+        const dotStartX = MARGIN + nameWidth + 8
+        const dotEndX = pageX - 8
+        if (dotEndX > dotStartX) {
+          doc.dash(1, { space: 3 })
+          doc.moveTo(dotStartX, entryY + 7).lineTo(dotEndX, entryY + 7)
+             .strokeColor(GREY).lineWidth(0.5).stroke()
+          doc.undash()
+        }
+        const h = 20
+        tocLinks.push({ dest, entryY, entryHeight: h })
+        doc.y = entryY + h + 6
+      }
+
+      // ---- Phase 1 heading (clickable → Scope) ----
+      drawTocHeadingLink('Phase 1', scopeDest)
+
+      // ---- Phase 1 service bullets (each clickable → that service) ----
+      if (allServices.length === 0) {
+        doc.fontSize(11).fillColor(JET).font('Helvetica')
+        doc.text('No services selected.', MARGIN + 20, doc.y, { width: CONTENT_WIDTH - 20 })
         doc.y += 16
       } else {
         for (const svc of allServices) {
-          const bulletText = `Setup and configuration of ${svc.name}`
-          const indent = 20
-          const colWidth = CONTENT_WIDTH - indent
-          doc.fontSize(11).fillColor(ORCHID).font('Helvetica-Bold')
-          doc.text('\u2022   ', MARGIN + indent, doc.y, { width: colWidth, continued: true })
-          doc.fillColor(JET).font('Helvetica')
-          doc.text(brandClean(bulletText), { width: colWidth })
-          doc.y += 8
+          const svcDest = findDest(`Service: ${svc.name}`)
+          drawTocBulletLink(`Setup and configuration of ${svc.name}`, svcDest)
         }
       }
 
       doc.y += 8
 
-      // ---- Phase 2 heading ----
-      doc.fontSize(14).fillColor(ORCHID).font('Helvetica-Bold')
-      doc.text('Phase 2', MARGIN, doc.y, { width: CONTENT_WIDTH })
-      doc.y += 16
+      // ---- Phase 2 heading (clickable → Phase 2 Integration) ----
+      drawTocHeadingLink('Phase 2', phase2Dest)
 
-      // Phase 2 bullets
+      // ---- Phase 2 bullets (each clickable → Phase 2 Integration) ----
       const phase2Bullets = [
         'Setup and configuration of Integration',
         'Setup and configuration of Training & Handover',
         'Remote training with Technical Services Engineer',
         'Further dedicated Technical Services Engineer support for full Go-Live',
       ]
-      doc.fontSize(11).fillColor(JET).font('Helvetica')
       for (const bulletText of phase2Bullets) {
-        const indent = 20
-        const colWidth = CONTENT_WIDTH - indent
-        doc.fontSize(11).fillColor(ORCHID).font('Helvetica-Bold')
-        doc.text('\u2022   ', MARGIN + indent, doc.y, { width: colWidth, continued: true })
-        doc.fillColor(JET).font('Helvetica')
-        doc.text(brandClean(bulletText), { width: colWidth })
-        doc.y += 8
+        drawTocBulletLink(bulletText, phase2Dest)
       }
 
       doc.y += 12
 
-      // ---- Project Milestones (link) ----
-      if (milestonesDest) {
-        const entryY = doc.y
-        doc.fontSize(13).fillColor(ORCHID).font('Helvetica-Bold')
-        doc.text('Project Milestones', MARGIN, entryY, { width: 350, align: 'left', lineBreak: false })
-        const displayPage = milestonesDest.pageIdx + 1
-        doc.text(String(displayPage), PAGE_WIDTH - MARGIN - 50, entryY, { width: 50, align: 'right', lineBreak: false })
-        // Dotted leader
-        const nameWidth = doc.widthOfString('Project Milestones', { font: 'Helvetica-Bold', fontSize: 13 })
-        const pageX = PAGE_WIDTH - MARGIN - 50
-        const dotStartX = MARGIN + nameWidth + 8
-        const dotEndX = pageX - 8
-        if (dotEndX > dotStartX) {
-          doc.dash(1, { space: 3 })
-          doc.moveTo(dotStartX, entryY + 7).lineTo(dotEndX, entryY + 7)
-             .strokeColor(GREY).lineWidth(0.5).stroke()
-          doc.undash()
-        }
-        tocLinks.push({ dest: milestonesDest, entryY, label: 'Project Milestones' })
-        doc.y = entryY + 24
-      }
+      // ---- Project Milestones (clickable link) ----
+      drawTocPageLink('Project Milestones', milestonesDest)
 
-      // ---- Signatures (link) ----
-      if (signaturesDest) {
-        const entryY = doc.y
-        doc.fontSize(13).fillColor(ORCHID).font('Helvetica-Bold')
-        doc.text('Signatures', MARGIN, entryY, { width: 350, align: 'left', lineBreak: false })
-        const displayPage = signaturesDest.pageIdx + 1
-        doc.text(String(displayPage), PAGE_WIDTH - MARGIN - 50, entryY, { width: 50, align: 'right', lineBreak: false })
-        // Dotted leader
-        const nameWidth = doc.widthOfString('Signatures', { font: 'Helvetica-Bold', fontSize: 13 })
-        const pageX = PAGE_WIDTH - MARGIN - 50
-        const dotStartX = MARGIN + nameWidth + 8
-        const dotEndX = pageX - 8
-        if (dotEndX > dotStartX) {
-          doc.dash(1, { space: 3 })
-          doc.moveTo(dotStartX, entryY + 7).lineTo(dotEndX, entryY + 7)
-             .strokeColor(GREY).lineWidth(0.5).stroke()
-          doc.undash()
-        }
-        tocLinks.push({ dest: signaturesDest, entryY, label: 'Signatures' })
-        doc.y = entryY + 24
-      }
+      // ---- Signatures (clickable link) ----
+      drawTocPageLink('Signatures', signaturesDest)
 
-      // ---- Add clickable link annotations for Milestones and Signatures ----
+      // ---- Add clickable link annotations for EVERY TOC line ----
       if (tocLinks.length > 0) {
         // Collect destination page dictionary references
         const destPageRefs = new Map<number, any>()
@@ -915,7 +918,7 @@ export async function GET(
           const linkRef = doc.ref({
             Type: 'Annot',
             Subtype: 'Link',
-            Rect: [MARGIN, link.entryY, PAGE_WIDTH - MARGIN, link.entryY + 20],
+            Rect: [MARGIN, link.entryY, PAGE_WIDTH - MARGIN, link.entryY + link.entryHeight],
             Border: [0, 0, 0],
             A: actionRef,
           })
