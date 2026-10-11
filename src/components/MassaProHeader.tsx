@@ -157,6 +157,13 @@ function MassaProHeaderInner() {
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
+                  onClick={() => { router.push('/nda') }}
+                  className="cursor-pointer"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Mutual NDA Builder
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   onClick={() => { router.push('/profile') }}
                   className="cursor-pointer"
                 >

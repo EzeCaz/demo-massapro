@@ -43,6 +43,7 @@ model User {
   assignedTickets     SupportTicket[]  @relation("AssignedTickets")
   ticketComments      TicketComment[]
   sowSnapshots        SOWSnapshot[]    @relation("OwnedSOWSnapshots")
+  ndaSnapshots        NDASnapshot[]    @relation("OwnedNDASnapshots")
   ownedDemos          Demo[]           @relation("OwnedDemos")
   demoAccesses        DemoAccess[]     @relation("DemoAccesses")
 }
@@ -538,6 +539,19 @@ model SOWSnapshot {
   payload         Json     // full SOW state (cover, services, tasks, specs, milestones)
   submittedAt     DateTime?
   approvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Persisted NDA documents — one per recipient. The NDA Builder UI at /nda
+// generates an NDASnapshot when the user clicks "Save to Platform".
+model NDASnapshot {
+  id              String   @id @default(cuid())
+  name            String
+  ownerId         String
+  owner           User     @relation("OwnedNDASnapshots", fields: [ownerId], references: [id])
+  status          String   @default("draft") // "draft", "sent", "signed", "expired"
+  payload         Json     // full NDA state (cover: NDACoverInfo)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
