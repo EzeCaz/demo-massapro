@@ -482,14 +482,46 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
     })
   }
 
-  // TOC entries — each links to the bookmark on the corresponding section heading
+  // Helper — a non-link TOC bullet entry (for service lists)
+  const tocBullet = (label: string): Paragraph => {
+    return new Paragraph({
+      spacing: { before: 40, after: 40 },
+      indent: { left: 480, hanging: 240 },
+      children: [
+        new TextRun({ text: '\u2022  ', size: 22, color: ORCHID, font: 'Calibri', bold: true }),
+        new TextRun({ text: label, size: 22, color: JET, font: 'Calibri' }),
+      ],
+    })
+  }
+
+  // Helper — a TOC phase heading (bold, non-link)
+  const tocPhaseHeading = (label: string): Paragraph => {
+    return new Paragraph({
+      spacing: { before: 240, after: 120 },
+      children: [
+        new TextRun({ text: label, bold: true, size: 28, color: ORCHID, font: 'Calibri' }),
+      ],
+    })
+  }
+
+  // Build the TOC content per the user's spec: Phase 1 service bullets,
+  // Phase 2 bullets, then links to Milestones and Signatures.
+  tocChildren.push(tocPhaseHeading('Phase 1'))
+  // Phase 1 service bullets — same list as the Deliverables section
+  if (allServices.length === 0) {
+    tocBullet('No services selected.')
+  } else {
+    allServices.forEach((svc) => tocBullet(`Setup and configuration of ${svc.name}`))
+  }
+
+  tocChildren.push(tocPhaseHeading('Phase 2'))
+  tocBullet('Setup and configuration of Integration')
+  tocBullet('Setup and configuration of Training & Handover')
+  tocBullet('Remote training with Technical Services Engineer')
+  tocBullet('Further dedicated Technical Services Engineer support for full Go-Live')
+
+  // Final two linked entries
   tocChildren.push(
-    tocEntry('Statement of Work — Project Overview', 'sow-overview'),
-    tocEntry('Scope — Phase 1', 'scope'),
-    tocEntry('Scope — Phase 2 Integration', 'scope-phase2'),
-    tocEntry('Configuration Tracker', 'tracker'),
-    tocEntry('Requirements', 'requirements'),
-    tocEntry('Support', 'support'),
     tocEntry('Project Milestones', 'milestones'),
     tocEntry('Signatures', 'signatures'),
     new Paragraph({ children: [new PageBreak()] }),
@@ -893,18 +925,8 @@ export async function buildSowDoc(payload: SOWExportPayload): Promise<Blob> {
           page: {
             margin: { top: 1080, right: 1080, bottom: 1080, left: 1080 },
             size: { orientation: PageOrientation.PORTRAIT },
-            // Orchid Purple page border on every page — cool design frame
-            borders: {
-              pageBorders: {
-                display: PageBorderDisplay.ALL_PAGES,
-                offsetFrom: PageBorderOffsetFrom.PAGE,
-                zOrder: PageBorderZOrder.FRONT,
-              },
-              pageBorderTop: { style: BorderStyle.SINGLE, size: 12, color: '9333EA', space: 24 },
-              pageBorderRight: { style: BorderStyle.SINGLE, size: 12, color: '9333EA', space: 24 },
-              pageBorderBottom: { style: BorderStyle.SINGLE, size: 12, color: '9333EA', space: 24 },
-              pageBorderLeft: { style: BorderStyle.SINGLE, size: 12, color: '9333EA', space: 24 },
-            },
+            // No page border — per user request, the document has no
+            // decorative frame on any page.
           },
         },
         headers: {

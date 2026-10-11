@@ -766,10 +766,13 @@ export async function GET(
     )
 
     // ---- Table of Contents — render content + clickable links ------------
-    // Now that all sections have been rendered and we know their page
-    // numbers, switch to the TOC page (reserved earlier) and draw the
-    // section entries with page numbers and internal link annotations.
-    if (tocPageIdx >= 0 && sectionDests.length > 0) {
+    // Now that all sections have been rendered, we render the TOC content
+    // on the reserved TOC page. The TOC shows:
+    //   Phase 1 (heading) + bullets for each selected service
+    //   Phase 2 (heading) + bullets for Integration, Training & Handover
+    //   Project Milestones (link → milestones section)
+    //   Signatures (link → signatures section)
+    if (tocPageIdx >= 0) {
       doc.switchToPage(tocPageIdx)
       doc.y = 80
 
@@ -779,75 +782,147 @@ export async function GET(
       doc.y += 8
       doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).strokeColor(ORCHID).lineWidth(1.5).stroke()
       doc.y += 20
-      doc.fillColor(JET).font('Helvetica').fontSize(11)
 
-      // Draw each section entry with dotted leader and page number.
-      // We record the y position of each entry for the link annotation.
-      const tocEntries: { dest: { name: string; pageIdx: number; y: number }; entryY: number }[] = []
-      for (const dest of sectionDests) {
+      // Find the Milestones and Signatures section destinations for links
+      const findDest = (name: string) => sectionDests.find((d) => d.name === name)
+      const milestonesDest = findDest('Project Milestones')
+      const signaturesDest = findDest('Signatures')
+
+      // Track link entry positions for annotation overlays
+      const tocLinks: { dest: { name: string; pageIdx: number; y: number }; entryY: number; label: string }[] = []
+
+      // ---- Phase 1 heading ----
+      doc.fontSize(14).fillColor(ORCHID).font('Helvetica-Bold')
+      doc.text('Phase 1', MARGIN, doc.y, { width: CONTENT_WIDTH })
+      doc.y += 16
+
+      // Phase 1 service bullets
+      doc.fontSize(11).fillColor(JET).font('Helvetica')
+      if (allServices.length === 0) {
+        doc.fillColor(ORCHID).font('Helvetica-Bold')
+        doc.text('\u2022   ', MARGIN + 20, doc.y, { width: CONTENT_WIDTH - 20, continued: true })
+        doc.fillColor(JET).font('Helvetica')
+        doc.text('No services selected.', { width: CONTENT_WIDTH - 20 })
+        doc.y += 16
+      } else {
+        for (const svc of allServices) {
+          const bulletText = `Setup and configuration of ${svc.name}`
+          const indent = 20
+          const colWidth = CONTENT_WIDTH - indent
+          doc.fontSize(11).fillColor(ORCHID).font('Helvetica-Bold')
+          doc.text('\u2022   ', MARGIN + indent, doc.y, { width: colWidth, continued: true })
+          doc.fillColor(JET).font('Helvetica')
+          doc.text(brandClean(bulletText), { width: colWidth })
+          doc.y += 8
+        }
+      }
+
+      doc.y += 8
+
+      // ---- Phase 2 heading ----
+      doc.fontSize(14).fillColor(ORCHID).font('Helvetica-Bold')
+      doc.text('Phase 2', MARGIN, doc.y, { width: CONTENT_WIDTH })
+      doc.y += 16
+
+      // Phase 2 bullets
+      const phase2Bullets = [
+        'Setup and configuration of Integration',
+        'Setup and configuration of Training & Handover',
+        'Remote training with Technical Services Engineer',
+        'Further dedicated Technical Services Engineer support for full Go-Live',
+      ]
+      doc.fontSize(11).fillColor(JET).font('Helvetica')
+      for (const bulletText of phase2Bullets) {
+        const indent = 20
+        const colWidth = CONTENT_WIDTH - indent
+        doc.fontSize(11).fillColor(ORCHID).font('Helvetica-Bold')
+        doc.text('\u2022   ', MARGIN + indent, doc.y, { width: colWidth, continued: true })
+        doc.fillColor(JET).font('Helvetica')
+        doc.text(brandClean(bulletText), { width: colWidth })
+        doc.y += 8
+      }
+
+      doc.y += 12
+
+      // ---- Project Milestones (link) ----
+      if (milestonesDest) {
         const entryY = doc.y
-        // Section name on the left
-        doc.fontSize(11).fillColor(JET).font('Helvetica')
-        doc.text(dest.name, MARGIN, entryY, { width: 350, align: 'left', lineBreak: false })
-
-        // Page number on the right (1-based display)
-        const displayPage = dest.pageIdx + 1
+        doc.fontSize(13).fillColor(ORCHID).font('Helvetica-Bold')
+        doc.text('Project Milestones', MARGIN, entryY, { width: 350, align: 'left', lineBreak: false })
+        const displayPage = milestonesDest.pageIdx + 1
         doc.text(String(displayPage), PAGE_WIDTH - MARGIN - 50, entryY, { width: 50, align: 'right', lineBreak: false })
-
-        // Dotted leader between name and page number
-        const nameWidth = doc.widthOfString(dest.name, { font: 'Helvetica', fontSize: 11 })
+        // Dotted leader
+        const nameWidth = doc.widthOfString('Project Milestones', { font: 'Helvetica-Bold', fontSize: 13 })
         const pageX = PAGE_WIDTH - MARGIN - 50
         const dotStartX = MARGIN + nameWidth + 8
         const dotEndX = pageX - 8
         if (dotEndX > dotStartX) {
           doc.dash(1, { space: 3 })
-          doc.moveTo(dotStartX, entryY + 6).lineTo(dotEndX, entryY + 6)
+          doc.moveTo(dotStartX, entryY + 7).lineTo(dotEndX, entryY + 7)
              .strokeColor(GREY).lineWidth(0.5).stroke()
           doc.undash()
         }
-
-        tocEntries.push({ dest, entryY })
-        doc.y = entryY + 20
+        tocLinks.push({ dest: milestonesDest, entryY, label: 'Project Milestones' })
+        doc.y = entryY + 24
       }
 
-      // Add clickable internal link annotations for each TOC entry.
-      // Each link annotation creates a GoTo action that navigates to the
-      // destination page at the section heading's y position.
-      // First, collect all destination page dictionary references.
-      const destPageRefs = new Map<number, any>()
-      for (const entry of tocEntries) {
-        if (!destPageRefs.has(entry.dest.pageIdx)) {
-          doc.switchToPage(entry.dest.pageIdx)
-          destPageRefs.set(entry.dest.pageIdx, doc.page.dictionary)
+      // ---- Signatures (link) ----
+      if (signaturesDest) {
+        const entryY = doc.y
+        doc.fontSize(13).fillColor(ORCHID).font('Helvetica-Bold')
+        doc.text('Signatures', MARGIN, entryY, { width: 350, align: 'left', lineBreak: false })
+        const displayPage = signaturesDest.pageIdx + 1
+        doc.text(String(displayPage), PAGE_WIDTH - MARGIN - 50, entryY, { width: 50, align: 'right', lineBreak: false })
+        // Dotted leader
+        const nameWidth = doc.widthOfString('Signatures', { font: 'Helvetica-Bold', fontSize: 13 })
+        const pageX = PAGE_WIDTH - MARGIN - 50
+        const dotStartX = MARGIN + nameWidth + 8
+        const dotEndX = pageX - 8
+        if (dotEndX > dotStartX) {
+          doc.dash(1, { space: 3 })
+          doc.moveTo(dotStartX, entryY + 7).lineTo(dotEndX, entryY + 7)
+             .strokeColor(GREY).lineWidth(0.5).stroke()
+          doc.undash()
         }
+        tocLinks.push({ dest: signaturesDest, entryY, label: 'Signatures' })
+        doc.y = entryY + 24
       }
 
-      // Switch to the TOC page and add link annotations
-      doc.switchToPage(tocPageIdx)
-      for (const entry of tocEntries) {
-        const destPageRef = destPageRefs.get(entry.dest.pageIdx)
-        if (!destPageRef) continue
+      // ---- Add clickable link annotations for Milestones and Signatures ----
+      if (tocLinks.length > 0) {
+        // Collect destination page dictionary references
+        const destPageRefs = new Map<number, any>()
+        for (const link of tocLinks) {
+          if (!destPageRefs.has(link.dest.pageIdx)) {
+            doc.switchToPage(link.dest.pageIdx)
+            destPageRefs.set(link.dest.pageIdx, doc.page.dictionary)
+          }
+        }
 
-        // Create the GoTo action as an indirect object
-        const actionRef = doc.ref({
-          Type: 'Action',
-          S: 'GoTo',
-          D: [destPageRef, 'XYZ', MARGIN, entry.dest.y, null],
-        })
-        actionRef.end()
+        // Switch to the TOC page and add link annotations
+        doc.switchToPage(tocPageIdx)
+        for (const link of tocLinks) {
+          const destPageRef = destPageRefs.get(link.dest.pageIdx)
+          if (!destPageRef) continue
 
-        // Create the link annotation as an indirect object
-        const linkRef = doc.ref({
-          Type: 'Annot',
-          Subtype: 'Link',
-          Rect: [MARGIN, entry.entryY, PAGE_WIDTH - MARGIN, entry.entryY + 20],
-          Border: [0, 0, 0],
-          A: actionRef,
-        })
-        linkRef.end()
+          const actionRef = doc.ref({
+            Type: 'Action',
+            S: 'GoTo',
+            D: [destPageRef, 'XYZ', MARGIN, link.dest.y, null],
+          })
+          actionRef.end()
 
-        // Add the annotation to the TOC page's Annots array
-        doc.page.annotations.push(linkRef)
+          const linkRef = doc.ref({
+            Type: 'Annot',
+            Subtype: 'Link',
+            Rect: [MARGIN, link.entryY, PAGE_WIDTH - MARGIN, link.entryY + 20],
+            Border: [0, 0, 0],
+            A: actionRef,
+          })
+          linkRef.end()
+
+          doc.page.annotations.push(linkRef)
+        }
       }
     }
 
