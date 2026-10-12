@@ -21,7 +21,8 @@ const GREY = '#666666'
 
 const PAGE_WIDTH = 595.28 // A4 portrait in points (72dpi)
 const PAGE_HEIGHT = 841.89
-const MARGIN = 72 // 1 inch margin (standard for legal docs)
+const MARGIN = 72 // 1 inch side/bottom margin (standard for legal docs)
+const TOP_MARGIN = 58 // 20% narrower than 72pt top margin
 const CONTENT_WIDTH = PAGE_WIDTH - 2 * MARGIN
 
 export async function GET(
@@ -71,7 +72,7 @@ export async function GET(
     // ---- Build the PDF ----
     const doc = new PDFDocument({
       size: 'A4',
-      margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+      margins: { top: TOP_MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
       bufferPages: true,
       info: {
         Title: `Mutual NDA — ${cover.recipientName || snapshot.name}`,
@@ -105,7 +106,7 @@ export async function GET(
     // ---- Document starts directly with the NDA content (no cover, no TOC) ----
     // Title — centered, bold, black
     doc.fontSize(14).fillColor(JET).font('Helvetica-Bold')
-    doc.text('MUTUAL NON-DISCLOSURE AND NON-CIRCUMVENTION AGREEMENT', MARGIN, MARGIN, {
+    doc.text('MUTUAL NON-DISCLOSURE AND NON-CIRCUMVENTION AGREEMENT', MARGIN, TOP_MARGIN, {
       width: CONTENT_WIDTH, align: 'center',
     })
     doc.y += 16
@@ -128,21 +129,21 @@ export async function GET(
       sec.paragraphs.forEach((para) => drawBody(para))
     })
 
-    // Signature block
+    // Signature block — check if BOTH the "IN WITNESS WHEREOF" text AND
+    // the signature block can fit on the current page. If not, add a page
+    // break first so they stay together.
+    const witnessTextHeight = 50 // approx height of the bold paragraph + spacing
+    const sigBlockHeight = 200 // total height needed for the full signature block
+    const pageBottomLimit = PAGE_HEIGHT - MARGIN - 20 // leave room for footer
+    const totalNeeded = witnessTextHeight + sigBlockHeight + 30 // text + gap + sig block
+    if (doc.y + totalNeeded > pageBottomLimit) {
+      doc.addPage()
+    }
+
+    // "IN WITNESS WHEREOF" paragraph
     doc.y += 20
     drawBody('IN WITNESS WHEREOF, the Parties hereto have executed this Mutual Non-Disclosure and Non-Circumvention Agreement as of the Effective Date set forth above.', { bold: true })
     doc.y += 10
-
-    // Signature block — two columns, plain black text, no colored backgrounds.
-    // CRITICAL: the entire signature block must fit on ONE page. We check
-    // if there's enough vertical space left; if not, we add a page break
-    // first. All text is drawn with absolute Y positions so PDFKit doesn't
-    // auto-advance doc.y mid-block and cause page overflow.
-    const sigBlockHeight = 200 // total height needed for the full signature block
-    const pageBottomLimit = PAGE_HEIGHT - MARGIN - 20 // leave room for footer
-    if (doc.y + sigBlockHeight > pageBottomLimit) {
-      doc.addPage()
-    }
 
     const signatures = (payload.signatures || {}) as {
       sinba?: { signedBy: string; signedAt: string; signedByEmail: string; image?: string }
