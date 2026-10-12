@@ -270,9 +270,23 @@ export async function GET(
     // Signature image area (if signed with an image)
     if (signatures.sinba?.image) {
       try {
-        const imgBuffer = Buffer.from(signatures.sinba.image.split(',')[1], 'base64')
-        doc.image(imgBuffer, MARGIN + 20, sigY, { fit: [sigColWidth - 40, sigImageHeight] })
-      } catch {}
+        const base64Data = signatures.sinba.image.split(',')[1] || signatures.sinba.image
+        const imgBuffer = Buffer.from(base64Data, 'base64')
+        // Use fit to scale the image within the signature box while
+        // preserving aspect ratio
+        doc.image(imgBuffer, MARGIN + 20, sigY, {
+          fit: [sigColWidth - 40, sigImageHeight],
+          align: 'center',
+          valign: 'center',
+        })
+      } catch (e: any) {
+        console.error('[NDA PDF] Sinba signature image error:', e?.message)
+        // Fallback: draw the dashed box if the image fails to render
+        doc.rect(MARGIN + 20, sigY, sigColWidth - 40, sigImageHeight).stroke(LAVENDER).lineWidth(0.5).dash(2, { space: 3 })
+        doc.undash()
+        doc.fillColor(GREY).font('Helvetica-Oblique').fontSize(10)
+        doc.text('Signature (image error)', MARGIN + 20, sigY + sigImageHeight / 2 - 5, { width: sigColWidth - 40, align: 'center', lineBreak: false })
+      }
     } else {
       // Empty signature box
       doc.rect(MARGIN + 20, sigY, sigColWidth - 40, sigImageHeight).stroke(LAVENDER).lineWidth(0.5).dash(2, { space: 3 })
@@ -301,9 +315,20 @@ export async function GET(
     sigY = sigStartY + 24
     if (signatures.recipient?.image) {
       try {
-        const imgBuffer = Buffer.from(signatures.recipient.image.split(',')[1], 'base64')
-        doc.image(imgBuffer, MARGIN + sigColWidth + 20, sigY, { fit: [sigColWidth - 40, sigImageHeight] })
-      } catch {}
+        const base64Data = signatures.recipient.image.split(',')[1] || signatures.recipient.image
+        const imgBuffer = Buffer.from(base64Data, 'base64')
+        doc.image(imgBuffer, MARGIN + sigColWidth + 20, sigY, {
+          fit: [sigColWidth - 40, sigImageHeight],
+          align: 'center',
+          valign: 'center',
+        })
+      } catch (e: any) {
+        console.error('[NDA PDF] Recipient signature image error:', e?.message)
+        doc.rect(MARGIN + sigColWidth + 20, sigY, sigColWidth - 40, sigImageHeight).stroke(LAVENDER).lineWidth(0.5).dash(2, { space: 3 })
+        doc.undash()
+        doc.fillColor(GREY).font('Helvetica-Oblique').fontSize(10)
+        doc.text('Signature (image error)', MARGIN + sigColWidth + 20, sigY + sigImageHeight / 2 - 5, { width: sigColWidth - 40, align: 'center', lineBreak: false })
+      }
     } else {
       doc.rect(MARGIN + sigColWidth + 20, sigY, sigColWidth - 40, sigImageHeight).stroke(LAVENDER).lineWidth(0.5).dash(2, { space: 3 })
       doc.undash()
