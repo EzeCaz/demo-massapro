@@ -110,17 +110,35 @@ export default function NDABuilder({ snapshotId: initialSnapshotId, inviteToken 
   // Save to platform — creates a new snapshot if none exists yet, otherwise
   // updates the existing one. Returns the snapshot ID so the PDF export can
   // use it immediately.
+  // CRITICAL: preserves existing payload fields (signatures, invites, etc.)
+  // by merging the cover with the existing payload, NOT overwriting it.
   const saveToPlatform = useCallback(async (): Promise<string | null> => {
     setSaving(true)
     try {
       const name = `Mutual NDA — ${cover.recipientName || 'Recipient'}`
-      const payload = { cover }
+      // Build the payload — preserve existing signatures/invites by
+      // fetching the current payload first (if updating an existing snapshot)
+      let existingPayload: any = {}
+      if (activeSnapshotId) {
+        try {
+          const res = await fetch(`/api/nda-snapshots/${activeSnapshotId}`)
+          if (res.ok) {
+            const data = await res.json()
+            existingPayload = data.snapshot?.payload || {}
+          }
+        } catch {}
+      }
+      // Merge: keep existing signatures + invites, update the cover
+      const payload = {
+        ...existingPayload,
+        cover,
+      }
       let snapshotId = activeSnapshotId
       if (snapshotId) {
         const res = await fetch(`/api/nda-snapshots/${snapshotId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, status: 'draft', payload }),
+          body: JSON.stringify({ name, status: existingPayload.signatures?.sinba && existingPayload.signatures?.recipient ? 'signed' : (existingPayload.signatures?.sinba || existingPayload.signatures?.recipient ? 'sent' : 'draft'), payload }),
         })
         if (!res.ok) throw new Error('Failed to save')
         toast.success('NDA saved to platform')
