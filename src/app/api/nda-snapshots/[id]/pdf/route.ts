@@ -133,7 +133,17 @@ export async function GET(
     drawBody('IN WITNESS WHEREOF, the Parties hereto have executed this Mutual Non-Disclosure and Non-Circumvention Agreement as of the Effective Date set forth above.', { bold: true })
     doc.y += 10
 
-    // Signature block — two columns, plain black text, no colored headers
+    // Signature block — two columns, plain black text, no colored backgrounds.
+    // CRITICAL: the entire signature block must fit on ONE page. We check
+    // if there's enough vertical space left; if not, we add a page break
+    // first. All text is drawn with absolute Y positions so PDFKit doesn't
+    // auto-advance doc.y mid-block and cause page overflow.
+    const sigBlockHeight = 200 // total height needed for the full signature block
+    const pageBottomLimit = PAGE_HEIGHT - MARGIN - 20 // leave room for footer
+    if (doc.y + sigBlockHeight > pageBottomLimit) {
+      doc.addPage()
+    }
+
     const signatures = (payload.signatures || {}) as {
       sinba?: { signedBy: string; signedAt: string; signedByEmail: string; image?: string }
       recipient?: { signedBy: string; signedAt: string; signedByEmail: string; image?: string }
@@ -143,22 +153,23 @@ export async function GET(
     const sigColWidth = CONTENT_WIDTH / 2
     const sigStartY = doc.y
     const sigImageHeight = 70
+    const lineHeight = 16
 
-    // Sinba column header
+    // ---- Column headers (both on the same line) ----
     doc.fontSize(11).fillColor(JET).font('Helvetica-Bold')
     doc.text('SINBA GROUP ISRAEL LTD.', MARGIN, sigStartY, { width: sigColWidth, lineBreak: false })
     doc.text('RECIPIENT', MARGIN + sigColWidth, sigStartY, { width: sigColWidth, lineBreak: false })
-    doc.y = sigStartY + 18
     doc.fillColor(JET).font('Helvetica').fontSize(11)
 
-    let sigY = doc.y
+    // ---- Sinba signature column (left) ----
+    let leftY = sigStartY + 24
 
-    // ---- Sinba signature image ----
+    // Signature image
     if (signatures.sinba?.image) {
       try {
         const base64Data = signatures.sinba.image.split(',')[1] || signatures.sinba.image
         const imgBuffer = Buffer.from(base64Data, 'base64')
-        doc.image(imgBuffer, MARGIN, sigY, {
+        doc.image(imgBuffer, MARGIN, leftY, {
           fit: [sigColWidth - 20, sigImageHeight],
           align: 'center',
           valign: 'center',
@@ -167,39 +178,38 @@ export async function GET(
         console.error('[NDA PDF] Sinba signature image error:', e?.message)
       }
     }
-    sigY += sigImageHeight
+    leftY += sigImageHeight
 
-    // Sinba signature line + details
-    doc.moveTo(MARGIN, sigY).lineTo(MARGIN + sigColWidth - 20, sigY).strokeColor(JET).lineWidth(0.5).stroke()
+    // Signature line
+    doc.moveTo(MARGIN, leftY).lineTo(MARGIN + sigColWidth - 20, leftY).strokeColor(JET).lineWidth(0.5).stroke()
     doc.fontSize(10).fillColor(JET).font('Helvetica')
-    doc.text('Signature:', MARGIN, sigY + 4, { width: sigColWidth - 20, lineBreak: false })
-    sigY += 16
-    doc.text(`By: ${signatures.sinba?.signedBy || sigs.sinba[1][1] || '________________'}`, MARGIN, sigY, { width: sigColWidth - 20, lineBreak: false })
-    sigY += 14
-    doc.text(`Name: ${signatures.sinba?.signedBy || sigs.sinba[2][1] || '________________'}`, MARGIN, sigY, { width: sigColWidth - 20, lineBreak: false })
-    sigY += 14
-    doc.text(`Title: ${sigs.sinba[3][1] || '________________'}`, MARGIN, sigY, { width: sigColWidth - 20, lineBreak: false })
-    sigY += 14
+
+    // Signature details — all at absolute Y positions
+    doc.text('Signature:', MARGIN, leftY + 4, { width: sigColWidth - 20, lineBreak: false })
+    leftY += lineHeight
+    doc.text(`By: ${signatures.sinba?.signedBy || sigs.sinba[1][1] || '________________'}`, MARGIN, leftY, { width: sigColWidth - 20, lineBreak: false })
+    leftY += lineHeight
+    doc.text(`Name: ${signatures.sinba?.signedBy || sigs.sinba[2][1] || '________________'}`, MARGIN, leftY, { width: sigColWidth - 20, lineBreak: false })
+    leftY += lineHeight
+    doc.text(`Title: ${sigs.sinba[3][1] || '________________'}`, MARGIN, leftY, { width: sigColWidth - 20, lineBreak: false })
+    leftY += lineHeight
     if (signatures.sinba?.signedAt) {
       doc.font('Helvetica-Bold')
-      doc.text(`Date: ${new Date(signatures.sinba.signedAt).toLocaleDateString()}`, MARGIN, sigY, { width: sigColWidth - 20, lineBreak: false })
+      doc.text(`Date: ${new Date(signatures.sinba.signedAt).toLocaleDateString()}`, MARGIN, leftY, { width: sigColWidth - 20, lineBreak: false })
       doc.font('Helvetica')
     } else {
-      doc.text(`Date: ${sigs.sinba[4][1] || '________________'}`, MARGIN, sigY, { width: sigColWidth - 20, lineBreak: false })
+      doc.text(`Date: ${sigs.sinba[4][1] || '________________'}`, MARGIN, leftY, { width: sigColWidth - 20, lineBreak: false })
     }
 
-    // ---- Recipient signature image ----
-    sigY = doc.y + 2
-    const recipientSigStartY = sigStartY + 18 + sigImageHeight + 16 + 14 + 14 + 14 + 14
-    sigY = recipientSigStartY - sigImageHeight - 16 - 14 - 14 - 14
-    // Reset to align with Sinba
-    sigY = sigStartY + 18
+    // ---- Recipient signature column (right) ----
+    let rightY = sigStartY + 24
 
+    // Signature image
     if (signatures.recipient?.image) {
       try {
         const base64Data = signatures.recipient.image.split(',')[1] || signatures.recipient.image
         const imgBuffer = Buffer.from(base64Data, 'base64')
-        doc.image(imgBuffer, MARGIN + sigColWidth, sigY, {
+        doc.image(imgBuffer, MARGIN + sigColWidth, rightY, {
           fit: [sigColWidth - 20, sigImageHeight],
           align: 'center',
           valign: 'center',
@@ -208,28 +218,32 @@ export async function GET(
         console.error('[NDA PDF] Recipient signature image error:', e?.message)
       }
     }
-    sigY += sigImageHeight
+    rightY += sigImageHeight
 
-    // Recipient signature line + details
-    doc.moveTo(MARGIN + sigColWidth, sigY).lineTo(MARGIN + CONTENT_WIDTH, sigY).strokeColor(JET).lineWidth(0.5).stroke()
+    // Signature line
+    doc.moveTo(MARGIN + sigColWidth, rightY).lineTo(MARGIN + CONTENT_WIDTH, rightY).strokeColor(JET).lineWidth(0.5).stroke()
     doc.fontSize(10).fillColor(JET).font('Helvetica')
-    doc.text('Signature:', MARGIN + sigColWidth, sigY + 4, { width: sigColWidth - 20, lineBreak: false })
-    sigY += 16
-    doc.text(`By: ${signatures.recipient?.signedBy || sigs.recipient[1][1] || '________________'}`, MARGIN + sigColWidth, sigY, { width: sigColWidth - 20, lineBreak: false })
-    sigY += 14
-    doc.text(`Name: ${signatures.recipient?.signedBy || sigs.recipient[2][1] || '________________'}`, MARGIN + sigColWidth, sigY, { width: sigColWidth - 20, lineBreak: false })
-    sigY += 14
-    doc.text(`Title: ${sigs.recipient[3][1] || '________________'}`, MARGIN + sigColWidth, sigY, { width: sigColWidth - 20, lineBreak: false })
-    sigY += 14
+
+    // Signature details — all at absolute Y positions
+    doc.text('Signature:', MARGIN + sigColWidth, rightY + 4, { width: sigColWidth - 20, lineBreak: false })
+    rightY += lineHeight
+    doc.text(`By: ${signatures.recipient?.signedBy || sigs.recipient[1][1] || '________________'}`, MARGIN + sigColWidth, rightY, { width: sigColWidth - 20, lineBreak: false })
+    rightY += lineHeight
+    doc.text(`Name: ${signatures.recipient?.signedBy || sigs.recipient[2][1] || '________________'}`, MARGIN + sigColWidth, rightY, { width: sigColWidth - 20, lineBreak: false })
+    rightY += lineHeight
+    doc.text(`Title: ${sigs.recipient[3][1] || '________________'}`, MARGIN + sigColWidth, rightY, { width: sigColWidth - 20, lineBreak: false })
+    rightY += lineHeight
     if (signatures.recipient?.signedAt) {
       doc.font('Helvetica-Bold')
-      doc.text(`Date: ${new Date(signatures.recipient.signedAt).toLocaleDateString()}`, MARGIN + sigColWidth, sigY, { width: sigColWidth - 20, lineBreak: false })
+      doc.text(`Date: ${new Date(signatures.recipient.signedAt).toLocaleDateString()}`, MARGIN + sigColWidth, rightY, { width: sigColWidth - 20, lineBreak: false })
       doc.font('Helvetica')
     } else {
-      doc.text(`Date: ${sigs.recipient[4][1] || '________________'}`, MARGIN + sigColWidth, sigY, { width: sigColWidth - 20, lineBreak: false })
+      doc.text(`Date: ${sigs.recipient[4][1] || '________________'}`, MARGIN + sigColWidth, rightY, { width: sigColWidth - 20, lineBreak: false })
     }
 
-    doc.y = Math.max(doc.y, sigY + 14) + 20
+    // Set doc.y to the bottom of the signature block so the next content
+    // (Annex) starts below it on the same page or a new page
+    doc.y = Math.max(leftY, rightY) + lineHeight + 20
 
     // Annex 1
     doc.addPage()
